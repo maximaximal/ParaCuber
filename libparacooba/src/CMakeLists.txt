@@ -1,6 +1,7 @@
 add_subdirectory(cuber)
 add_subdirectory(webserver)
 add_subdirectory(messages)
+add_subdirectory(net)
 
 set(PARACOOBA_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/communicator.cpp
@@ -20,6 +21,7 @@ set(PARACOOBA_SRCS
     ${CUBER_SRCS}
     ${WEBSERVER_SRCS}
     ${MESSAGES_SRCS}
+    ${NET_SRCS}
 
     ${CMAKE_CURRENT_SOURCE_DIR}/cadical_task.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/decision_task.cpp
