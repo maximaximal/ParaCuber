@@ -71,6 +71,9 @@ Config::Config()
     (GetConfigNameFromEnum(Config::HTTPListenPort),
          po::value<uint16_t>()->default_value(18080)->value_name("int"),
          "port for internal webserver")
+    (GetConfigNameFromEnum(Config::ConnectionRetries),
+         po::value<uint16_t>()->default_value(5)->value_name("int"),
+         "number of times connections are tried to be re-established after they were lost")
     (GetConfigNameFromEnum(Config::HTTPDocRoot),
          po::value<std::string>()->default_value(getInternalWebserverDefaultDocRoot())->value_name("string"),
          "document root path of the internal http server")
@@ -105,6 +108,7 @@ Config::Config()
      po::value<std::string>()->default_value("127.0.0.1")->value_name("string"),
          "Initial peer to connect to. Should should be a long-running daemon.")
     ("debug,d", po::bool_switch(&m_debugMode)->default_value(false)->value_name("bool"), "debug mode (all debug output)")
+    ("network-debug,nd", po::bool_switch(&m_networkDebugMode)->default_value(false)->value_name("bool"), "network debug mode (all debug output, including network communication)")
     ("info,i", po::bool_switch(&m_infoMode)->default_value(false)->value_name("bool"), "info mode (more information)")
     ("daemon", po::bool_switch(&m_daemonMode)->default_value(false)->value_name("bool"), "daemon mode")
     ("enable-client-cadical", po::bool_switch(&m_enableClientCaDiCaL)->default_value(false)->value_name("bool"), "direct solving via CaDiCaL on client")
@@ -127,6 +131,12 @@ Config::generateId(int64_t uniqueNumber)
 bool
 Config::parseParameters(int argc, char** argv)
 {
+  static char* argv_default[] = { (char*)"", nullptr };
+  if(argc == 0 && argv == nullptr) {
+    argc = 1;
+    argv = argv_default;
+  }
+
   po::positional_options_description positionalOptions;
   positionalOptions.add("input-file", 1);
 
@@ -216,6 +226,8 @@ Config::processCommonParameters(const boost::program_options::variables_map& vm)
     vm, m_config.data(), Config::TCPTargetPort);
   conditionallySetConfigOptionToArray<uint16_t>(
     vm, m_config.data(), Config::HTTPListenPort);
+  conditionallySetConfigOptionToArray<uint16_t>(
+    vm, m_config.data(), Config::ConnectionRetries);
   conditionallySetConfigOptionToArray<std::string>(
     vm, m_config.data(), Config::HTTPDocRoot);
   conditionallySetConfigOptionToArray<int32_t>(

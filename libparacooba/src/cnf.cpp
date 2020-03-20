@@ -16,6 +16,7 @@
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <boost/filesystem/operations.hpp>
 #include <boost/log/expressions/formatters/c_decorator.hpp>
 #include <cadical/cadical.hpp>
 #include <iostream>
@@ -107,6 +108,17 @@ CNF::send(boost::asio::ip::tcp::socket* socket, SendFinishedCB cb, bool first)
 
   socket->async_write_some(boost::asio::null_buffers(),
                            std::bind(&CNF::sendCB, this, data, socket));
+}
+
+uint64_t
+CNF::getSizeToBeSent()
+{
+  uint64_t size = 0;
+  boost::filesystem::path p(m_dimacsFile);
+  std::string dimacsBasename = p.filename().string();
+  size += dimacsBasename.size() + 1;
+  size += boost::filesystem::file_size(p);
+  return size;
 }
 
 void
@@ -255,7 +267,9 @@ jrStateToCNFTreeState(messages::JobResult::State s)
 }
 
 void
-CNF::receiveJobDescription(int64_t sentFromID, messages::JobDescription&& jd)
+CNF::receiveJobDescription(int64_t sentFromID,
+                           messages::JobDescription&& jd,
+                           NetworkedNode& nn)
 {
   {
     std::unique_lock loggerLock(m_loggerMutex);
@@ -349,6 +363,10 @@ CNF::receiveJobDescription(int64_t sentFromID, messages::JobDescription&& jd)
         });
       break;
     }
+    case messages::JobDescription::Kind::Unknown:
+      PARACOOBA_LOG(m_logger, GlobalWarning)
+        << "Received invalid job description!";
+      break;
   }
 }
 

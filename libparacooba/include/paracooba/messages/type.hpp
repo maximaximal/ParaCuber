@@ -30,6 +30,8 @@ TypeToStr(Type type)
       return "CNFTreeNodeStatusRequest";
     case Type::CNFTreeNodeStatusReply:
       return "CNFTreeNodeStatusReply";
+    case Type::Unknown:
+      return "Unknown Type (Specified)";
   }
   return "Unknown Type";
 }

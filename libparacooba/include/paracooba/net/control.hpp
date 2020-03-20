@@ -1,27 +1,38 @@
 #ifndef PARACOOBA_NET_CONTROL
 #define PARACOOBA_NET_CONTROL
 
+#include "../messages/message_receiver.hpp"
+
 namespace paracooba {
+class NetworkedNode;
+
 namespace messages {
 class Message;
 }
 
 namespace net {
-class Control
+class Connection;
+
+class Control : public messages::MessageReceiver
 {
   public:
   Control();
   ~Control();
 
-  void receiveMessage(const messages::Message& msg);
+  virtual void receiveMessage(const messages::Message& msg, NetworkedNode& nn);
 
   private:
-  void handleOnlineAnnouncement(const messages::Message& msg);
-  void handleOfflineAnnouncement(const messages::Message& msg);
-  void handleAnnouncementRequest(const messages::Message& msg);
-  void handleNodeStatus(const messages::Message& msg);
-  void handleCNFTreeNodeStatusRequest(const messages::Message& msg);
-  void handleCNFTreeNodeStatusReply(const messages::Message& msg);
+  void handleOnlineAnnouncement(const messages::Message& msg,
+                                NetworkedNode& conn);
+  void handleOfflineAnnouncement(const messages::Message& msg,
+                                 NetworkedNode& conn);
+  void handleAnnouncementRequest(const messages::Message& msg,
+                                 NetworkedNode& conn);
+  void handleNodeStatus(const messages::Message& msg, NetworkedNode& conn);
+  void handleCNFTreeNodeStatusRequest(const messages::Message& msg,
+                                      NetworkedNode& conn);
+  void handleCNFTreeNodeStatusReply(const messages::Message& msg,
+                                    NetworkedNode& conn);
 };
 }
 }

@@ -376,7 +376,7 @@ class Communicator::UDPServer
         }
         break;
       case messages::AnnouncementRequest::NameMatch::ID:
-        if(!m_communicator->m_config->getInt64(Config::Id) ==
+        if(m_communicator->m_config->getInt64(Config::Id) !=
            announcementRequest.getIdMatch()) {
           return;
         }
@@ -980,17 +980,6 @@ class Communicator::TCPServer
           break;
         }
         case HandshakePhase::ReadBody: {
-          if(m_comm->m_config->isDaemonMode()) {
-            auto [context, inserted] =
-              m_comm->m_config->getDaemon()->getOrCreateContext(m_senderID);
-            m_context = &context;
-            m_cnf = m_context->getRootCNF();
-          } else {
-            m_cnf = m_comm->m_config->getClient()->getRootCNF();
-            PARACOOBA_LOG(m_logger, LocalWarning)
-              << "ReadBody should only ever be called on a daemon!";
-          }
-
           m_streambuf.commit(bytes);
           std::stringstream ssOut;
           boost::asio::streambuf::const_buffers_type constBuffer =
@@ -1047,7 +1036,12 @@ class Communicator::TCPServer
             m_cnf = m_comm->m_config->getClient()->getRootCNF();
           }
 
-          m_cnf->receiveJobDescription(m_senderID, std::move(jd));
+          NetworkedNode* nn = m_comm->getClusterStatistics()
+                                ->getNode(jd.getOriginatorID())
+                                .getNetworkedNode();
+          assert(nn);
+
+          m_cnf->receiveJobDescription(m_senderID, std::move(jd), *nn);
 
           if(m_context) {
             switch(jd.getKind()) {

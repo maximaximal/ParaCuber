@@ -1,8 +1,6 @@
 #ifndef PARACOOBA_MESSAGES_JOBDESCRIPTION_RECEIVER
 #define PARACOOBA_MESSAGES_JOBDESCRIPTION_RECEIVER
 
-#include <functional>
-
 namespace paracooba {
 class NetworkedNode;
 
@@ -13,7 +11,17 @@ class JobDescriptionReceiver
 {
   public:
   virtual void receiveJobDescription(int64_t sentFromID,
-                                     JobDescription&& jd) = 0;
+                                     JobDescription&& jd,
+                                     NetworkedNode& nn) = 0;
+};
+
+/** @brief Provide a JobDescriptionReceiver instance to handle incoming job
+ * descriptions. */
+class JobDescriptionReceiverProvider
+{
+  public:
+  virtual JobDescriptionReceiver* getJobDescriptionReceiver(
+    int64_t subject) = 0;
 };
 }
 }

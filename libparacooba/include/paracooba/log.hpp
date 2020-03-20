@@ -59,6 +59,7 @@ class Log
    */
   enum Severity
   {
+    NetTrace,
     Trace,
     Debug,
     Info,
@@ -79,22 +80,27 @@ class Log
   /** @brief Create a logger for a specific environment, which may receive
    * multiple custom attributes.
    */
-  boost::log::sources::severity_logger<Severity> createLogger(
+  boost::log::sources::severity_logger<Log::Severity> createLogger(
     const std::string& context,
     const std::string& meta = "");
-  boost::log::sources::severity_logger_mt<Severity> createLoggerMT(
+  boost::log::sources::severity_logger_mt<Log::Severity> createLoggerMT(
     const std::string& context,
     const std::string& meta = "");
+
+  bool isLogLevelEnabled(Severity severity);
 
   private:
   ConfigPtr m_config;
   boost::shared_ptr<boost::log::sinks::synchronous_sink<
     boost::log::sinks::basic_text_ostream_backend<char>>>
     m_consoleSink;
+  Severity m_targetSeverity = LocalWarning;
 };
 
 using LogPtr = std::shared_ptr<Log>;
 using Logger = boost::log::sources::severity_logger<Log::Severity>;
+using LoggerPtr =
+  std::shared_ptr<boost::log::sources::severity_logger<Log::Severity>>;
 using LoggerMT = boost::log::sources::severity_logger_mt<Log::Severity>;
 
 std::ostream&

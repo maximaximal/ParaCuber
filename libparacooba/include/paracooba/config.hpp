@@ -50,6 +50,7 @@ class Config
     AutoShutdown,
     DumpTreeAtExit,
     LimitedTreeDump,
+    ConnectionRetries,
 
     FreqCuberCutoff,
 
@@ -71,7 +72,7 @@ class Config
    * @return True if program execution may continue, false if program should be
    * terminated.
    */
-  bool parseParameters(int argc, char* argv[]);
+  bool parseParameters(int argc = 0, char* argv[] = nullptr);
   /** @brief Parse command line parameters and also process provided
    * configuration files.
    *
@@ -128,6 +129,8 @@ class Config
 
   /** @brief Check if debug mode is active. */
   inline bool isDebugMode() { return m_debugMode; }
+  /** @brief Check if network debug mode is active. */
+  inline bool isNetworkDebugMode() { return m_networkDebugMode; }
   /** @brief Check if info mode is active. */
   inline bool isInfoMode() { return m_infoMode; }
   /** @brief Check if daemon mode is active. */
@@ -135,6 +138,8 @@ class Config
 
   /** @brief Set debug mode active. */
   inline void setDebugMode(bool v) { m_debugMode = v; }
+  /** @brief Set network debug mode active. */
+  inline void setNetworkDebugMode(bool v) { m_networkDebugMode = v; }
   /** @brief Set info mode active. */
   inline void setInfoMode(bool v) { m_infoMode = v; }
   /** @brief Set daemon mode active. */
@@ -189,6 +194,7 @@ class Config
   boost::program_options::options_description m_optionsFile;
 
   bool m_debugMode = false;
+  bool m_networkDebugMode = false;
   bool m_infoMode = false;
   bool m_daemonMode = false;
   bool m_enableClientCaDiCaL = false;
@@ -255,6 +261,8 @@ GetConfigNameFromEnum(Config::Key key)
       return "dump-tree-at-exit";
     case Config::LimitedTreeDump:
       return "limited-tree-dump";
+    case Config::ConnectionRetries:
+      return "connection-retries";
     default:
       return "";
   }

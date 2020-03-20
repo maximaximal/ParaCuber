@@ -86,22 +86,27 @@ Log::Log(ConfigPtr config)
     logging::add_common_attributes();
 
     // Logging Filter
-    if(!config->isDebugMode()) {
-      boost::log::core::get()->set_filter(paracooba_logger_severity >=
-                                          Severity::LocalWarning);
-    }
-    if(config->isInfoMode()) {
-      boost::log::core::get()->set_filter(paracooba_logger_severity >=
-                                          Severity::Info);
-    }
+    Severity defaultSeverity = Severity::LocalWarning;
+    m_targetSeverity = std::min(
+      { config->isDebugMode() ? Severity::Trace : defaultSeverity,
+        config->isInfoMode() ? Severity::Info : defaultSeverity,
+        config->isNetworkDebugMode() ? Severity::NetTrace : defaultSeverity });
+
+    assert(m_targetSeverity >= NetTrace);
+    assert(m_targetSeverity <= Fatal);
+
+    boost::log::core::get()->set_filter(paracooba_logger_severity >=
+                                        m_targetSeverity);
   } catch(const std::exception& e) {
     std::cerr
       << "> Exception during initialisation of global log variables! Error: "
-      << e.what() << std::endl;
+      << e.what() << ". Log level would have been " << m_targetSeverity
+      << std::endl;
     BOOST_THROW_EXCEPTION(e);
   }
   try {
-    auto &targetStream = m_config->useSTDOUTForLogging() ? std::cout : std::clog;
+    auto& targetStream =
+      m_config->useSTDOUTForLogging() ? std::cout : std::clog;
 
     m_consoleSink = logging::add_console_log(
       targetStream,
@@ -162,13 +167,19 @@ Log::createLoggerMT(const std::string& context, const std::string& meta)
     boost::log::sources::severity_logger_mt<Log::Severity>>(context, meta);
 }
 
+bool
+Log::isLogLevelEnabled(Severity sev)
+{
+  return sev >= m_targetSeverity;
+}
+
 std::ostream&
 operator<<(std::ostream& strm, ::paracooba::Log::Severity level)
 {
-  static const char* strings[] = { "Trace",       "Debug",
-                                   "Info",        "LocalWarning",
-                                   "LocalError",  "GlobalWarning",
-                                   "GlobalError", "Fatal" };
+  static const char* strings[] = {
+    "NetTrace",   "Trace",         "Debug",       "Info", "LocalWarning",
+    "LocalError", "GlobalWarning", "GlobalError", "Fatal"
+  };
   if(static_cast<std::size_t>(level) < sizeof(strings) / sizeof(*strings))
     strm << strings[level];
   else
@@ -184,12 +195,13 @@ operator<<(
                            ::paracooba::Log::Severity_Tag> const& manip)
 {
   static const char* colorised_strings[] = {
-    "\033[0;37mTRCE\033[0m", "\033[0;32mDEBG\033[0m", "\033[1;37mINFO\033[0m",
-    "\033[0;33mLWRN\033[0m", "\033[0;33mLERR\033[0m", "\033[0;31mGWRN\033[0m",
-    "\033[0;31mGERR\033[0m", "\033[0;35mFTAL\033[0m"
+    "\033[0;37mNTRC\033[0m", "\033[0;37mTRCE\033[0m", "\033[0;32mDEBG\033[0m",
+    "\033[1;37mINFO\033[0m", "\033[0;33mLWRN\033[0m", "\033[0;33mLERR\033[0m",
+    "\033[0;31mGWRN\033[0m", "\033[0;31mGERR\033[0m", "\033[0;35mFTAL\033[0m"
   };
-  static const char* uncolorised_strings[] = { "TRCE", "DEBG", "INFO", "LWRN",
-                                               "LERR", "GWRN", "GERR", "FTAL" };
+  static const char* uncolorised_strings[] = { "NTRC", "TRCE", "DEBG",
+                                               "INFO", "LWRN", "LERR",
+                                               "GWRN", "GERR", "FTAL" };
 
   static const char** strings = uncolorised_strings;
 

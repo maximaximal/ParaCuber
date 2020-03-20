@@ -76,6 +76,9 @@ main(int argc, char* argv[])
       case TaskResult::Unsatisfiable:
         std::cout << "unsat" << std::endl;
         break;
+      default:
+        std::cout << "invalid result" << std::endl;
+        break;
     }
   } else {
   }

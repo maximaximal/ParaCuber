@@ -98,6 +98,7 @@ class CNF
   void send(boost::asio::ip::tcp::socket* socket,
             SendFinishedCB finishedCallback,
             bool first = true);
+  uint64_t getSizeToBeSent();
 
   void sendAllowanceMap(int64_t id, SendFinishedCB finishedCB);
 
@@ -116,7 +117,8 @@ class CNF
                std::size_t length);
 
   virtual void receiveJobDescription(int64_t sentFromID,
-                                     messages::JobDescription&& jd);
+                                     messages::JobDescription&& jd,
+                                     NetworkedNode& nn);
 
   inline int64_t getOriginId() { return m_originId; }
 
