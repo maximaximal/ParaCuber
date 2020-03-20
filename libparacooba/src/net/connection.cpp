@@ -24,6 +24,7 @@ namespace net {
 Connection::State::State(boost::asio::io_service& ioService,
                          LogPtr log,
                          ConfigPtr config,
+                         ClusterNodeStore& clusterNodeStore,
                          messages::MessageReceiver& msgRec,
                          messages::JobDescriptionReceiverProvider& jdRecProv)
   : ioService(ioService)
@@ -31,6 +32,7 @@ Connection::State::State(boost::asio::io_service& ioService,
   , log(log)
   , logger(log->createLogger("Connection"))
   , config(config)
+  , clusterNodeStore(clusterNodeStore)
   , messageReceiver(msgRec)
   , jobDescriptionReceiverProvider(jdRecProv)
 {
@@ -67,9 +69,15 @@ Connection::SendQueueEntry::~SendQueueEntry() {}
 Connection::Connection(boost::asio::io_service& ioService,
                        LogPtr log,
                        ConfigPtr config,
+                       ClusterNodeStore& clusterNodeStore,
                        messages::MessageReceiver& msgRec,
                        messages::JobDescriptionReceiverProvider& jdRecProv)
-  : m_state(std::make_shared<State>(ioService, log, config, msgRec, jdRecProv))
+  : m_state(std::make_shared<State>(ioService,
+                                    log,
+                                    config,
+                                    clusterNodeStore,
+                                    msgRec,
+                                    jdRecProv))
 {}
 Connection::~Connection() {}
 

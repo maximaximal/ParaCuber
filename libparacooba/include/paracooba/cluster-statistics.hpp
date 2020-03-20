@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include <string>
 
+#include "cluster-node-store.hpp"
 #include "cluster-node.hpp"
 #include "cnftree.hpp"
 #include "log.hpp"
@@ -20,7 +21,7 @@ class TaskSkeleton;
 /** @brief Statistics about the whole cluster, based on which decisions may be
  * made.
  */
-class ClusterStatistics
+class ClusterStatistics : public ClusterNodeStore
 {
   public:
   /** @brief Constructor
@@ -34,10 +35,10 @@ class ClusterStatistics
 
   using HandledNodesSet = std::set<ClusterNode*>;
 
-  const ClusterNode& getNode(int64_t id) const;
-  ClusterNode& getNode(int64_t id);
-
-  std::pair<ClusterNode&, bool> getOrCreateNode(int64_t id);
+  virtual const ClusterNode& getNode(ID id) const;
+  virtual ClusterNode& getNode(ID id);
+  virtual ClusterNodeCreationPair getOrCreateNode(ID id);
+  virtual bool hasNode(ID id);
 
   friend std::ostream& operator<<(std::ostream& o, const ClusterStatistics& c)
   {
@@ -68,8 +69,6 @@ class ClusterStatistics
                         ClusterNode& node,
                         std::shared_ptr<CNF> rootCNF,
                         const TaskSkeleton& skel);
-
-  bool hasNode(int64_t id);
 
   ClusterNode* getFittestNodeForNewWork(int originator,
                                         const HandledNodesSet& handledNodes,

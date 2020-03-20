@@ -43,7 +43,7 @@ ClusterStatistics::initLocalNode()
 }
 
 const ClusterNode&
-ClusterStatistics::getNode(int64_t id) const
+ClusterStatistics::getNode(ID id) const
 {
   auto [map, lock] = getNodeMap();
   auto it = map.find(id);
@@ -55,7 +55,7 @@ ClusterStatistics::getNode(int64_t id) const
 }
 
 ClusterNode&
-ClusterStatistics::getNode(int64_t id)
+ClusterStatistics::getNode(ID id)
 {
   auto [map, lock] = getNodeMap();
   auto it = map.find(id);
@@ -66,12 +66,19 @@ ClusterStatistics::getNode(int64_t id)
   return it->second;
 }
 
-std::pair<ClusterNode&, bool>
-ClusterStatistics::getOrCreateNode(int64_t id)
+ClusterNodeStore::ClusterNodeCreationPair
+ClusterStatistics::getOrCreateNode(ID id)
 {
   auto [it, inserted] = m_nodeMap.emplace(
     std::pair{ id, ClusterNode(m_changed, m_thisNode->getId(), id) });
   return { it->second, inserted };
+}
+
+bool
+ClusterStatistics::hasNode(ID id)
+{
+  auto [map, lock] = getNodeMap();
+  return map.count(id) > 0;
 }
 
 ClusterNode&
@@ -194,12 +201,6 @@ ClusterStatistics::handlePathOnNode(int64_t originator,
   // This path should be handled on another compute node. This means, the
   // other compute node requires a Cube-Beam from the Communicator class.
   rootCNF->sendPath(node.getId(), skel, []() {});
-}
-bool
-ClusterStatistics::hasNode(int64_t id)
-{
-  auto [map, lock] = getNodeMap();
-  return map.find(id) != map.end();
 }
 
 bool

@@ -11,6 +11,8 @@
 #include "../log.hpp"
 
 namespace paracooba {
+class ClusterNodeStore;
+
 namespace messages {
 class MessageReceiver;
 class JobDescriptionReceiverProvider;
@@ -34,6 +36,7 @@ class TCPAcceptor : boost::asio::coroutine
       boost::asio::ip::tcp::endpoint endpoint,
       LogPtr log,
       ConfigPtr config,
+      ClusterNodeStore& clusterNodeStore,
       messages::MessageReceiver& msgReceiver,
       messages::JobDescriptionReceiverProvider& jdReceiverProvider);
 
@@ -42,9 +45,9 @@ class TCPAcceptor : boost::asio::coroutine
     LogPtr log;
     Logger logger;
     ConfigPtr config;
+    ClusterNodeStore& clusterNodeStore;
     messages::MessageReceiver& msgReceiver;
     messages::JobDescriptionReceiverProvider& jdReceiverProvider;
-
     std::unique_ptr<Connection> newConnection;
   };
 
@@ -52,6 +55,7 @@ class TCPAcceptor : boost::asio::coroutine
               boost::asio::ip::tcp::endpoint endpoint,
               LogPtr log,
               ConfigPtr config,
+              ClusterNodeStore& clusterNodeStore,
               messages::MessageReceiver& msgReceiver,
               messages::JobDescriptionReceiverProvider& jdReceiverProvider);
   ~TCPAcceptor();
@@ -69,6 +73,7 @@ class TCPAcceptor : boost::asio::coroutine
   LogPtr& log() { return m_state->log; }
   Logger& logger() { return m_state->logger; }
   ConfigPtr& config() { return m_state->config; }
+  ClusterNodeStore& clusterNodeStore() { return m_state->clusterNodeStore; }
   messages::MessageReceiver& messageReceiver() { return m_state->msgReceiver; }
   messages::JobDescriptionReceiverProvider& jobDescriptionReceiverProvider()
   {

@@ -21,12 +21,13 @@
 #include "../messages/message_receiver.hpp"
 
 namespace paracooba {
+class CNF;
+class ClusterNodeStore;
+
 namespace messages {
 class Message;
 class JobDescription;
 }
-
-class CNF;
 
 namespace net {
 /** @brief Class representing a connection between two compute nodes.
@@ -74,6 +75,7 @@ class Connection
     explicit State(boost::asio::io_service& ioService,
                    LogPtr log,
                    ConfigPtr config,
+                   ClusterNodeStore& clusterNodeStore,
                    messages::MessageReceiver& msgRec,
                    messages::JobDescriptionReceiverProvider& jdRecProv);
     ~State();
@@ -83,6 +85,7 @@ class Connection
     LogPtr log;
     Logger logger;
     ConfigPtr config;
+    ClusterNodeStore& clusterNodeStore;
     messages::MessageReceiver& messageReceiver;
     messages::JobDescriptionReceiverProvider& jobDescriptionReceiverProvider;
     NetworkedNode* nn = nullptr;
@@ -117,6 +120,7 @@ class Connection
     boost::asio::io_service& ioService,
     LogPtr log,
     ConfigPtr config,
+    ClusterNodeStore& clusterNodeStore,
     messages::MessageReceiver& msgReceiver,
     messages::JobDescriptionReceiverProvider& jdReceiverProvider);
 
@@ -175,6 +179,7 @@ class Connection
     return m_state->currentSendItem;
   }
   ConfigPtr& config() { return m_state->config; }
+  ClusterNodeStore& clusterNodeStore() { return m_state->clusterNodeStore; }
   ContextPtr& context() { return m_state->context; }
   std::shared_ptr<CNF>& cnf() { return m_state->cnf; }
   NetworkedNode*& remoteNN() { return m_state->nn; }

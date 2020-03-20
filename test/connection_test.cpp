@@ -4,6 +4,7 @@
 #include <boost/asio/placeholders.hpp>
 #include <catch2/catch.hpp>
 #include <chrono>
+#include <paracooba/cluster-node-store.hpp>
 #include <paracooba/config.hpp>
 #include <paracooba/net/connection.hpp>
 #include <paracooba/networked_node.hpp>
@@ -50,6 +51,15 @@ class JDReceiverProvider : public JobDescriptionReceiverProvider
   std::map<int64_t, JDReceiver> receivers;
 };
 
+class ClNodeStore : public ClusterNodeStore
+{
+  public:
+  virtual const ClusterNode& getNode(int64_t id) const {};
+  virtual ClusterNode& getNode(int64_t id){};
+  virtual ClusterNodeCreationPair getOrCreateNode(ID id){};
+  virtual bool hasNode(ID id) { return false; };
+};
+
 TEST_CASE("Initiate a paracooba::net::Connection")
 {
   boost::asio::io_service ioService;
@@ -70,8 +80,20 @@ TEST_CASE("Initiate a paracooba::net::Connection")
   MsgReceiver msgReceiver2;
   JDReceiverProvider jdReceiverProvider2;
 
-  Connection conn1(ioService, log1, config1, msgReceiver1, jdReceiverProvider1);
-  Connection conn2(ioService, log2, config2, msgReceiver2, jdReceiverProvider2);
+  ClNodeStore clusterNodeStore;
+
+  Connection conn1(ioService,
+                   log1,
+                   config1,
+                   clusterNodeStore,
+                   msgReceiver1,
+                   jdReceiverProvider1);
+  Connection conn2(ioService,
+                   log2,
+                   config2,
+                   clusterNodeStore,
+                   msgReceiver2,
+                   jdReceiverProvider2);
 
   NetworkedNode nn(boost::asio::ip::udp::endpoint(
                      boost::asio::ip::address_v4::loopback(), 17170),

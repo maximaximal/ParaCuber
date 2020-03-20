@@ -9,6 +9,7 @@ TCPAcceptor::State::State(
   boost::asio::ip::tcp::endpoint endpoint,
   LogPtr log,
   ConfigPtr config,
+  ClusterNodeStore& clusterNodeStore,
   messages::MessageReceiver& msgReceiver,
   messages::JobDescriptionReceiverProvider& jdReceiverProvider)
   : ioService(ioService)
@@ -16,6 +17,7 @@ TCPAcceptor::State::State(
   , log(log)
   , logger(log->createLogger("TCPAcceptor"))
   , config(config)
+  , clusterNodeStore(clusterNodeStore)
   , msgReceiver(msgReceiver)
   , jdReceiverProvider(jdReceiverProvider)
 {}
@@ -25,12 +27,14 @@ TCPAcceptor::TCPAcceptor(
   boost::asio::ip::tcp::endpoint endpoint,
   LogPtr log,
   ConfigPtr config,
+  ClusterNodeStore& clusterNodeStore,
   messages::MessageReceiver& msgReceiver,
   messages::JobDescriptionReceiverProvider& jdReceiverProvider)
   : m_state(std::make_shared<State>(ioService,
                                     endpoint,
                                     log,
                                     config,
+                                    clusterNodeStore,
                                     msgReceiver,
                                     jdReceiverProvider))
 {}
@@ -76,6 +80,7 @@ TCPAcceptor::makeNewConnection()
     std::make_unique<Connection>(ioService(),
                                  log(),
                                  config(),
+                                 clusterNodeStore(),
                                  messageReceiver(),
                                  jobDescriptionReceiverProvider());
 }
