@@ -48,8 +48,7 @@ using boost::asio::ip::udp;
 
 namespace paracooba {
 void
-applyMessageNodeToStatsNode(const messages::Node& src,
-                            ClusterStatistics::Node& tgt)
+applyMessageNodeToStatsNode(const messages::Node& src, ClusterNode& tgt)
 {
   tgt.setName(src.getName());
   tgt.setId(src.getId());
@@ -65,7 +64,7 @@ applyMessageNodeToStatsNode(const messages::Node& src,
 }
 void
 applyMessageNodeStatusToStatsNode(const messages::NodeStatus& src,
-                                  ClusterStatistics::Node& tgt,
+                                  ClusterNode& tgt,
                                   Config& config)
 {
   tgt.setWorkQueueSize(src.getWorkQueueSize());
@@ -118,7 +117,7 @@ class Communicator::UDPServer
     auto endpoint = udp::endpoint(m_ipAddress, port);
 
     {
-      ClusterStatistics::Node& thisNode = m_clusterStatistics->getThisNode();
+      ClusterNode& thisNode = m_clusterStatistics->getThisNode();
       assert(!thisNode.getNetworkedNode());
       std::unique_ptr<NetworkedNode> nn =
         std::make_unique<NetworkedNode>(endpoint, thisNode.getId());
@@ -233,7 +232,7 @@ class Communicator::UDPServer
     }
   }
 
-  void networkStatisticsNode(ClusterStatistics::Node& node)
+  void networkStatisticsNode(ClusterNode& node)
   {
     NetworkedNode* nn = node.getNetworkedNode();
     if(!nn) {

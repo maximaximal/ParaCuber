@@ -4,7 +4,6 @@
 #include <boost/signals2/connection.hpp>
 #include <queue>
 
-#include "cluster-statistics.hpp"
 #include "cnftree.hpp"
 #include "log.hpp"
 #include "paracooba/priority_queue_lock_semantics.hpp"
@@ -17,6 +16,7 @@ class Task;
 class CaDiCaLMgr;
 class CaDiCaLTask;
 class TaskSkeleton;
+class ClusterNode;
 
 /** @brief Creates new tasks for the runners during the solving process.
  *
@@ -65,7 +65,7 @@ class TaskFactory
 
   void addExternallyProcessingTask(int64_t originator,
                                    CNFTree::Path p,
-                                   ClusterStatistics::Node& node);
+                                   ClusterNode& node);
 
   void removeExternallyProcessedTask(CNFTree::Path p,
                                      int64_t id,
@@ -95,7 +95,7 @@ class TaskFactory
   private:
   struct ExternalTasksSet
   {
-    ClusterStatistics::Node& node;
+    ClusterNode& node;
     boost::signals2::scoped_connection nodeOfflineSignalConnection;
     std::set<TaskSkeleton> tasks;
 

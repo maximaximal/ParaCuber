@@ -1,7 +1,7 @@
 #ifndef PARACOOBA_DAEMON_HPP
 #define PARACOOBA_DAEMON_HPP
 
-#include "cluster-statistics.hpp"
+#include "cluster-node.hpp"
 #include "log.hpp"
 #include "util.hpp"
 #include <map>
@@ -26,7 +26,7 @@ class Daemon
     explicit Context(std::shared_ptr<CNF> rootCNF,
                      int64_t originatorID,
                      Daemon* daemon,
-                     ClusterStatistics::Node& statisticsNode);
+                     ClusterNode& statisticsNode);
     ~Context();
 
     enum State
@@ -63,7 +63,7 @@ class Daemon
 
     std::mutex m_contextMutex;
 
-    ClusterStatistics::Node& m_statisticsNode;
+    ClusterNode& m_statisticsNode;
 
     boost::signals2::connection m_nodeOfflineSignalConnection;
   };

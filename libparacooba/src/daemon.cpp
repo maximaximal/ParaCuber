@@ -13,7 +13,7 @@ namespace paracooba {
 Daemon::Context::Context(std::shared_ptr<CNF> rootCNF,
                          int64_t originatorID,
                          Daemon* daemon,
-                         ClusterStatistics::Node& statsNode)
+                         ClusterNode& statsNode)
   : m_rootCNF(rootCNF)
   , m_originatorID(originatorID)
   , m_daemon(daemon)

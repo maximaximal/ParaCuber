@@ -15,73 +15,6 @@
 #include <string>
 
 namespace paracooba {
-
-static const size_t ClusterStatisticsNodeWindowSize = 20;
-
-ClusterStatistics::Node::Node(bool& changed, int64_t thisId, int64_t id)
-  : m_changed(changed)
-  , m_acc_workQueueSize(boost::accumulators::tag::rolling_window::window_size =
-                          ClusterStatisticsNodeWindowSize)
-  , m_acc_durationSinceLastStatus(
-      boost::accumulators::tag::rolling_window::window_size =
-        ClusterStatisticsNodeWindowSize)
-  , m_thisId(thisId)
-  , m_id(id)
-{
-  initMeanDuration(ClusterStatisticsNodeWindowSize);
-}
-
-ClusterStatistics::Node::Node(Node&& o) noexcept
-  : m_changed(o.m_changed)
-  , m_name(std::move(o.m_name))
-  , m_host(std::move(o.m_host))
-  , m_networkedNode(std::move(o.m_networkedNode))
-  , m_maximumCPUFrequency(o.m_maximumCPUFrequency)
-  , m_uptime(o.m_uptime)
-  , m_availableWorkers(o.m_availableWorkers)
-  , m_workQueueCapacity(o.m_workQueueCapacity)
-  , m_workQueueSize(o.m_workQueueSize)
-  , m_id(o.m_id)
-  , m_fullyKnown(o.m_fullyKnown)
-  , m_daemon(o.m_daemon)
-  , m_distance(o.m_distance)
-  , m_contexts(std::move(o.m_contexts))
-  , m_thisId(o.m_thisId)
-  , m_acc_workQueueSize(std::move(o.m_acc_workQueueSize))
-  , m_acc_durationSinceLastStatus(std::move(o.m_acc_durationSinceLastStatus))
-{}
-ClusterStatistics::Node::~Node() {}
-
-void
-ClusterStatistics::Node::setNetworkedNode(
-  std::unique_ptr<NetworkedNode> networkedNode)
-{
-  CLUSTERSTATISTICS_NODE_CHANGED(m_networkedNode, std::move(networkedNode))
-}
-
-void
-ClusterStatistics::Node::setWorkQueueSize(uint64_t workQueueSize)
-{
-  CLUSTERSTATISTICS_NODE_CHANGED(m_workQueueSize, workQueueSize)
-  m_acc_workQueueSize(workQueueSize);
-}
-bool
-ClusterStatistics::Node::getReadyForWork(int64_t id) const
-{
-  if(id == 0)
-    id = m_thisId;
-  Daemon::Context::State state =
-    static_cast<Daemon::Context::State>(getContextState(id));
-  return state & Daemon::Context::WaitingForWork;
-}
-void
-ClusterStatistics::Node::applyTaskFactoryVector(const TaskFactoryVector& v)
-{
-  for(auto& e : v) {
-    setContextSize(e->getOriginId(), e->getSize());
-  }
-}
-
 ClusterStatistics::ClusterStatistics(ConfigPtr config, LogPtr log)
   : m_config(config)
   , m_logger(log->createLogger("ClusterStatistics"))
@@ -92,7 +25,7 @@ ClusterStatistics::~ClusterStatistics() {}
 void
 ClusterStatistics::initLocalNode()
 {
-  Node thisNode(
+  ClusterNode thisNode(
     m_changed, m_config->getInt64(Config::Id), m_config->getInt64(Config::Id));
   thisNode.setDaemon(m_config->isDaemonMode());
   thisNode.setDistance(1);
@@ -109,7 +42,7 @@ ClusterStatistics::initLocalNode()
   m_thisNode = &addNode(std::move(thisNode));
 }
 
-const ClusterStatistics::Node&
+const ClusterNode&
 ClusterStatistics::getNode(int64_t id) const
 {
   auto [map, lock] = getNodeMap();
@@ -121,7 +54,7 @@ ClusterStatistics::getNode(int64_t id) const
   return it->second;
 }
 
-ClusterStatistics::Node&
+ClusterNode&
 ClusterStatistics::getNode(int64_t id)
 {
   auto [map, lock] = getNodeMap();
@@ -133,16 +66,16 @@ ClusterStatistics::getNode(int64_t id)
   return it->second;
 }
 
-std::pair<ClusterStatistics::Node&, bool>
+std::pair<ClusterNode&, bool>
 ClusterStatistics::getOrCreateNode(int64_t id)
 {
   auto [it, inserted] = m_nodeMap.emplace(
-    std::pair{ id, Node(m_changed, m_thisNode->getId(), id) });
+    std::pair{ id, ClusterNode(m_changed, m_thisNode->getId(), id) });
   return { it->second, inserted };
 }
 
-ClusterStatistics::Node&
-ClusterStatistics::addNode(Node&& node)
+ClusterNode&
+ClusterStatistics::addNode(ClusterNode&& node)
 {
   auto [map, lock] = getUniqueNodeMap();
   return map.emplace(node.m_id, std::move(node)).first->second;
@@ -184,34 +117,34 @@ ClusterStatistics::unsafeRemoveNode(int64_t id, const std::string& reason)
   }
 }
 
-SharedLockView<ClusterStatistics::NodeMap&>
+SharedLockView<ClusterNodeMap&>
 ClusterStatistics::getNodeMap()
 {
   std::shared_lock lock(m_nodeMapMutex);
   return { m_nodeMap, std::move(lock) };
 }
-ConstSharedLockView<ClusterStatistics::NodeMap>
+ConstSharedLockView<ClusterNodeMap>
 ClusterStatistics::getNodeMap() const
 {
   std::shared_lock lock(m_nodeMapMutex);
   return { m_nodeMap, std::move(lock) };
 }
 
-UniqueLockView<ClusterStatistics::NodeMap&>
+UniqueLockView<ClusterNodeMap&>
 ClusterStatistics::getUniqueNodeMap()
 {
   std::unique_lock lock(m_nodeMapMutex);
   return { m_nodeMap, std::move(lock) };
 }
 
-ClusterStatistics::Node*
+ClusterNode*
 ClusterStatistics::getFittestNodeForNewWork(int originator,
                                             const HandledNodesSet& handledNodes,
                                             int64_t rootCNFID)
 {
   auto [map, lock] = getNodeMap();
 
-  ClusterStatistics::Node* target = m_thisNode;
+  ClusterNode* target = m_thisNode;
 
   float min_fitness = std::numeric_limits<float>::max();
   for(auto it = map.begin(); it != map.end(); ++it) {
@@ -244,7 +177,7 @@ ClusterStatistics::getFittestNodeForNewWork(int originator,
 
 void
 ClusterStatistics::handlePathOnNode(int64_t originator,
-                                    Node& node,
+                                    ClusterNode& node,
                                     std::shared_ptr<CNF> rootCNF,
                                     const TaskSkeleton& skel)
 {

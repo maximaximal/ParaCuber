@@ -6,6 +6,7 @@ add_subdirectory(net)
 set(PARACOOBA_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/communicator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cluster-statistics.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cluster-node.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/runner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/log.cpp

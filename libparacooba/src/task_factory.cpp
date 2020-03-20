@@ -173,7 +173,7 @@ TaskFactory::getNumberOfUnansweredRemoteWork() const
 void
 TaskFactory::addExternallyProcessingTask(int64_t originator,
                                          CNFTree::Path p,
-                                         ClusterStatistics::Node& node)
+                                         ClusterNode& node)
 {
   std::unique_lock lock(m_externalTasksSetMapMutex);
 
