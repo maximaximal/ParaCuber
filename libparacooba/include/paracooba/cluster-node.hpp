@@ -16,7 +16,9 @@
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include "cluster-node-store.hpp"
 #include "log.hpp"
+#include "types.hpp"
 #include "util.hpp"
 
 #define PARACOOBA_CLUSTERNODE_CHANGED(MEMBER, VAR) \
@@ -28,6 +30,14 @@
 namespace paracooba {
 class NetworkedNode;
 class TaskFactory;
+class ClusterNodeStore;
+
+namespace messages {
+class MessageTransmitter;
+class NodeStatus;
+class OnlineAnnouncement;
+class Node;
+}
 
 /** @brief Statistics about the performance of a node in the cluster.
  *
@@ -36,7 +46,12 @@ class TaskFactory;
 class ClusterNode
 {
   public:
-  explicit ClusterNode(bool& changed, int64_t thisId, int64_t id);
+  explicit ClusterNode(
+    bool& changed,
+    ID thisId,
+    ID id,
+    messages::MessageTransmitter& statelessMessageTransmitter,
+    ClusterNodeStore& clusterNodeStore);
   ~ClusterNode();
 
   ClusterNode(ClusterNode&& o) noexcept;
@@ -221,6 +236,11 @@ class ClusterNode
   using NodeOfflineSignal = boost::signals2::signal<void(const std::string&)>;
   NodeOfflineSignal& getNodeOfflineSignal() { return m_nodeOfflineSignal; }
 
+  void applyMessageNode(const messages::Node& node);
+  void applyOnlineAnnouncementMessage(
+    const messages::OnlineAnnouncement& onlineAnnouncement);
+  void applyNodeStatusMessage(const messages::NodeStatus& nodeStatus);
+
   private:
   friend class ClusterStatistics;
 
@@ -245,6 +265,7 @@ class ClusterNode
   uint8_t m_distance = 2;
 
   NodeOfflineSignal m_nodeOfflineSignal;
+  ClusterNodeStore& m_clusterNodeStore;
 
   mutable std::shared_mutex m_contextsMutex;
   ContextMap m_contexts;

@@ -1,13 +1,15 @@
 #ifndef PARACOOBA_DAEMON_HPP
 #define PARACOOBA_DAEMON_HPP
 
-#include "cluster-node.hpp"
-#include "log.hpp"
-#include "util.hpp"
 #include <map>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+
+#include "cluster-node.hpp"
+#include "log.hpp"
+#include "messages/jobdescription_receiver.hpp"
+#include "util.hpp"
 
 namespace paracooba {
 class CNF;
@@ -17,7 +19,7 @@ class TaskFactory;
 /** @brief Daemonised solver mode that waits for tasks and sends and receives
  * statistics to/from other solvers.
  */
-class Daemon
+class Daemon : public messages::JobDescriptionReceiverProvider
 {
   public:
   class Context
@@ -86,6 +88,9 @@ class Daemon
   std::pair<Context&, bool> getOrCreateContext(int64_t id);
 
   void forgetAboutContext(int64_t id);
+
+  virtual messages::JobDescriptionReceiver* getJobDescriptionReceiver(
+    int64_t subject);
 
   private:
   std::shared_ptr<Config> m_config;

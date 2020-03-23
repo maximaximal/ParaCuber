@@ -179,6 +179,17 @@ Daemon::forgetAboutContext(int64_t id)
   map.erase(id);
 }
 
+messages::JobDescriptionReceiver*
+Daemon::getJobDescriptionReceiver(int64_t subject)
+{
+  auto [ctx, lock] = getContext(subject);
+  if(!ctx) {
+    return nullptr;
+  }
+  assert(ctx->getRootCNF());
+  return ctx->getRootCNF().get();
+}
+
 SharedLockView<Daemon::Context*>
 Daemon::getContext(int64_t id)
 {

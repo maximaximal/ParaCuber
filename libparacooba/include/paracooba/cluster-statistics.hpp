@@ -16,6 +16,10 @@
 #include "util.hpp"
 
 namespace paracooba {
+namespace messages {
+class MessageTransmitter;
+}
+
 class TaskSkeleton;
 
 /** @brief Statistics about the whole cluster, based on which decisions may be
@@ -26,7 +30,9 @@ class ClusterStatistics : public ClusterNodeStore
   public:
   /** @brief Constructor
    */
-  ClusterStatistics(ConfigPtr config, LogPtr log);
+  ClusterStatistics(ConfigPtr config,
+                    LogPtr log,
+                    messages::MessageTransmitter& statelessMessageTransmitter);
   /** @brief Destructor.
    */
   ~ClusterStatistics();
@@ -101,6 +107,7 @@ class ClusterStatistics : public ClusterNodeStore
   ClusterNodeMap m_nodeMap;
   ClusterNode* m_thisNode;
   bool m_changed = false;
+  messages::MessageTransmitter& m_statelessMessageTransmitter;
 
   void unsafeRemoveNode(int64_t id, const std::string& reason);
 

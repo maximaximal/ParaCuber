@@ -66,7 +66,6 @@ class Message
 
     return Type::Unknown;
   }
-  const int64_t getOrigin() const { return origin; }
 
   PARACOOBA_MESSAGES_MESSAGE_GETSET_BODY(AnnouncementRequest)
   PARACOOBA_MESSAGES_MESSAGE_GETSET_BODY(OnlineAnnouncement)
@@ -83,6 +82,7 @@ class Message
                                           CNFTreeNodeStatusReply>;
 
   int64_t getTarget() const { return target; }
+  int64_t getOrigin() const { return origin; }
 
   private:
   friend class cereal::access;

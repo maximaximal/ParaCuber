@@ -22,6 +22,7 @@
 #include <boost/asio/high_resolution_timer.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/socket_base.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -47,36 +48,31 @@
 using boost::asio::ip::udp;
 
 namespace paracooba {
-void
-applyMessageNodeToStatsNode(const messages::Node& src, ClusterNode& tgt)
-{
-  tgt.setName(src.getName());
-  tgt.setId(src.getId());
-  tgt.setMaximumCPUFrequency(src.getMaximumCPUFrequency());
-  tgt.setAvailableWorkers(src.getAvailableWorkers());
-  tgt.setUptime(src.getUptime());
-  tgt.setWorkQueueCapacity(src.getWorkQueueCapacity());
-  tgt.setWorkQueueSize(src.getWorkQueueSize());
-  tgt.setUdpListenPort(src.getUdpListenPort());
-  tgt.setTcpListenPort(src.getTcpListenPort());
-  tgt.setFullyKnown(true);
-  tgt.setDaemon(src.getDaemonMode());
-}
-void
-applyMessageNodeStatusToStatsNode(const messages::NodeStatus& src,
-                                  ClusterNode& tgt,
-                                  Config& config)
-{
-  tgt.setWorkQueueSize(src.getWorkQueueSize());
 
-  if(src.isDaemon()) {
-    auto daemon = src.getDaemon();
-
-    for(auto context : daemon.getContexts()) {
-      tgt.setContextStateAndSize(
-        context.getOriginator(), context.getState(), context.getFactorySize());
-    }
+static boost::asio::ip::address
+ParseBroadcastAddress(Logger& logger, const std::string& addressStr)
+{
+  boost::system::error_code err;
+  auto address = boost::asio::ip::address::from_string(addressStr, err);
+  if(err) {
+    PARACOOBA_LOG(logger, LocalError)
+      << "Could not parse given IP Broadcast Address \"" << addressStr
+      << "\". Error: " << err;
+    address = boost::asio::ip::address_v4::broadcast();
   }
+  return address;
+}
+static boost::asio::ip::address
+ParseIPAddress(Logger& logger, const std::string& addressStr)
+{
+  boost::system::error_code err;
+  auto address = boost::asio::ip::address::from_string(addressStr, err);
+  if(err) {
+    PARACOOBA_LOG(logger, LocalError) << "Could not parse given IP Address \""
+                                      << addressStr << "\". Error: " << err;
+    address = boost::asio::ip::address_v4::any();
+  }
+  return address;
 }
 
 template<class Socket, typename T>
@@ -98,565 +94,6 @@ readGenericFromStreambuf(Streambuf& b, T& val)
             tgt);
   b.consume(sizeof(T));
 }
-
-class Communicator::UDPServer
-{
-  public:
-  UDPServer(Communicator* comm,
-            LogPtr log,
-            boost::asio::io_service& ioService,
-            uint16_t port)
-    : m_communicator(comm)
-    , m_socket(ioService)
-    , m_logger(log->createLogger("UDPServer"))
-    , m_port(port)
-    , m_clusterStatistics(comm->getClusterStatistics())
-  {
-    m_ipAddress = generateIPAddress();
-    m_broadcastAddress = generateBroadcastAddress();
-    auto endpoint = udp::endpoint(m_ipAddress, port);
-
-    {
-      ClusterNode& thisNode = m_clusterStatistics->getThisNode();
-      assert(!thisNode.getNetworkedNode());
-      std::unique_ptr<NetworkedNode> nn =
-        std::make_unique<NetworkedNode>(endpoint, thisNode.getId());
-      nn->setUdpPort(port);
-      thisNode.setNetworkedNode(std::move(nn));
-    }
-
-    m_socket.open(endpoint.protocol());
-    m_socket.set_option(boost::asio::socket_base::broadcast(true));
-    m_socket.bind(endpoint);
-    startReceive();
-    PARACOOBA_LOG(m_logger, Trace)
-      << "UDPServer started at " << m_socket.local_endpoint();
-  }
-  ~UDPServer()
-  {
-    PARACOOBA_LOG(m_logger, Trace)
-      << "UDPServer at port " << m_port << " stopped.";
-  }
-
-  boost::asio::ip::address getIPAddress() { return m_ipAddress; }
-  boost::asio::ip::address getBroadcastAddress() { return m_broadcastAddress; }
-
-  void startReceive()
-  {
-    m_recStreambuf.consume(m_recStreambuf.size() + 1);
-
-    m_socket.async_receive_from(
-      m_recStreambuf.prepare(REC_BUF_SIZE),
-      m_remoteEndpoint,
-      boost::bind(&UDPServer::handleReceive,
-                  this,
-                  boost::asio::placeholders::error,
-                  boost::asio::placeholders::bytes_transferred));
-  }
-
-  void handleReceive(const boost::system::error_code& error, std::size_t bytes)
-  {
-    // No framing required. A single receive always maps directly to a message.
-    if(!error || error == boost::asio::error::message_size) {
-      messages::Message msg;
-
-      do {
-        try {
-          m_recStreambuf.commit(bytes);
-
-          std::istream recIstream(&m_recStreambuf);
-          cereal::BinaryInputArchive iarchive(recIstream);
-          iarchive(msg);
-        } catch(cereal::Exception& e) {
-          PARACOOBA_LOG(m_logger, GlobalError)
-            << "Received invalid message, parsing threw serialisation "
-               "exception! "
-               "Message: "
-            << e.what();
-          break;
-        }
-
-        switch(msg.getType()) {
-          case messages::Type::OnlineAnnouncement:
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> Online Announcement from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            handleOnlineAnnouncement(msg);
-            break;
-          case messages::Type::OfflineAnnouncement:
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> Offline Announcement from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            handleOfflineAnnouncement(msg);
-            break;
-          case messages::Type::AnnouncementRequest:
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> Announcement Request from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            handleAnnouncementRequest(msg);
-            break;
-          case messages::Type::NodeStatus:
-            /*
-            // These logging messages are not required most of the time and only
-            // waste processor time.
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> Node Status from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            */
-            handleNodeStatus(msg);
-            break;
-          case messages::Type::CNFTreeNodeStatusRequest:
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> CNFTree Node Status Request from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            handleCNFTreeNodeStatusRequest(msg);
-            break;
-          case messages::Type::CNFTreeNodeStatusReply:
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> CNFTree Node Status Reply from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            handleCNFTreeNodeStatusReply(msg);
-            break;
-          default:
-            PARACOOBA_LOG(m_logger, Trace)
-              << "  -> Unknown UDP Message from " << m_remoteEndpoint
-              << " (ID: " << msg.getOrigin() << ")";
-            break;
-        }
-      } while(false);
-
-      startReceive();
-    } else {
-      PARACOOBA_LOG(m_logger, LocalError)
-        << "Error receiving data from UDP socket. Error: " << error.message();
-    }
-  }
-
-  void networkStatisticsNode(ClusterNode& node)
-  {
-    NetworkedNode* nn = node.getNetworkedNode();
-    if(!nn) {
-      std::unique_ptr<NetworkedNode> networkedNode =
-        std::make_unique<NetworkedNode>(m_remoteEndpoint, node.getId());
-      networkedNode->setUdpPort(m_remoteEndpoint.port());
-      networkedNode->setTcpPort(node.getTcpListenPort());
-      node.setNetworkedNode(std::move(networkedNode));
-      nn = node.getNetworkedNode();
-    }
-
-    if(!node.getFullyKnown() &&
-       node.getId() != m_communicator->m_config->getInt64(Config::Id)) {
-      assert(nn->getRemoteUdpEndpoint().port() != 0);
-      m_communicator->m_ioService.post(
-        std::bind(&Communicator::task_requestAnnounce,
-                  m_communicator,
-                  node.getId(),
-                  "",
-                  nn));
-    }
-  }
-
-  void sendAnnouncementRequestToKnownPeer(const messages::Node::KnownPeer& peer)
-  {
-    auto msg = buildMessage();
-    msg.insert(messages::AnnouncementRequest());
-
-    boost::asio::ip::udp::endpoint endpoint;
-    if(peer.ipAddress[0] == 0) {
-      // IPv4 Endpoint
-      endpoint = boost::asio::ip::udp::endpoint(
-        boost::asio::ip::address_v4(static_cast<uint32_t>(peer.ipAddress[1])),
-        peer.port);
-    } else {
-      // IPv6 Endpoint
-      std::array<uint8_t, 16> bytes;
-      std::copy(&peer.ipAddress[0], &peer.ipAddress[1], bytes.data());
-      endpoint = boost::asio::ip::udp::endpoint(
-        boost::asio::ip::address_v6(bytes), peer.port);
-    }
-
-    sendMessage(endpoint, msg, false, false);
-  }
-
-  void analyseKnownPeersOfNode(const messages::Node& node)
-  {
-    for(const auto& peer : node.getKnownPeers()) {
-      if(messages::Node::peerLocallyReachable(
-           m_clusterStatistics->getThisNode().getNetworkedNode(), peer) &&
-         !m_clusterStatistics->hasNode(peer.id)) {
-        sendAnnouncementRequestToKnownPeer(peer);
-      }
-    }
-  }
-
-  void handleOnlineAnnouncement(const messages::Message& msg)
-  {
-    const messages::OnlineAnnouncement& onlineAnnouncement =
-      msg.getOnlineAnnouncement();
-    const messages::Node& messageNode = onlineAnnouncement.getNode();
-
-    int64_t id = msg.getOrigin();
-
-    auto [statisticsNode, inserted] = m_clusterStatistics->getOrCreateNode(id);
-
-    applyMessageNodeToStatsNode(messageNode, statisticsNode);
-
-    networkStatisticsNode(statisticsNode);
-
-    NetworkedNode* nn = statisticsNode.getNetworkedNode();
-
-    // TCP Listen Ports must not change during execution.
-    assert((nn->getRemoteTcpEndpoint().port() == 0 ||
-            (nn->getRemoteTcpEndpoint().port() ==
-             statisticsNode.getTcpListenPort())));
-
-    nn->setTcpPort(statisticsNode.getTcpListenPort());
-
-    if(inserted && !m_communicator->m_config->isDaemonMode()) {
-      // Send announcement of this client to the other node before transferring
-      // the root CNF.
-      m_communicator->m_ioService.post(
-        std::bind(&Communicator::task_announce,
-                  m_communicator,
-                  statisticsNode.getNetworkedNode()));
-
-      if(statisticsNode.isDaemon()) {
-        m_communicator->sendCNFToNode(
-          m_communicator->m_config->getClient()->getRootCNF(),
-          statisticsNode.getId());
-      }
-    }
-
-    analyseKnownPeersOfNode(messageNode);
-
-    m_communicator->checkAndTransmitClusterStatisticsChanges();
-  }
-  void handleOfflineAnnouncement(const messages::Message& msg)
-  {
-    const messages::OfflineAnnouncement& offlineAnnouncement =
-      msg.getOfflineAnnouncement();
-
-    m_clusterStatistics->removeNode(msg.getOrigin(),
-                                    offlineAnnouncement.getReason());
-
-    m_communicator->checkAndTransmitClusterStatisticsChanges();
-  }
-  void handleAnnouncementRequest(const messages::Message& msg)
-  {
-    const messages::AnnouncementRequest& announcementRequest =
-      msg.getAnnouncementRequest();
-    const messages::Node& requester = announcementRequest.getRequester();
-
-    auto [statisticsNode, inserted] =
-      m_clusterStatistics->getOrCreateNode(requester.getId());
-
-    applyMessageNodeToStatsNode(requester, statisticsNode);
-
-    networkStatisticsNode(statisticsNode);
-
-    if(!m_communicator->m_config->isDaemonMode()) {
-      if(requester.getDaemonMode()) {
-        m_communicator->sendCNFToNode(
-          m_communicator->m_config->getClient()->getRootCNF(),
-          statisticsNode.getId());
-      }
-    }
-
-    switch(announcementRequest.getNameMatchType()) {
-      case messages::AnnouncementRequest::NameMatch::NO_RESTRICTION:
-        break;
-      case messages::AnnouncementRequest::NameMatch::REGEX:
-        if(!std::regex_match(std::string(m_communicator->m_config->getString(
-                               Config::LocalName)),
-                             std::regex(announcementRequest.getRegexMatch()))) {
-          PARACOOBA_LOG(m_logger, Trace)
-            << "No regex match! Regex: " << announcementRequest.getRegexMatch();
-          return;
-        }
-        break;
-      case messages::AnnouncementRequest::NameMatch::ID:
-        if(m_communicator->m_config->getInt64(Config::Id) !=
-           announcementRequest.getIdMatch()) {
-          return;
-        }
-    }
-
-    if(requester.getId() != m_communicator->m_config->getInt64(Config::Id)) {
-      m_communicator->m_ioService.post(
-        std::bind(&Communicator::task_announce,
-                  m_communicator,
-                  statisticsNode.getNetworkedNode()));
-    }
-
-    analyseKnownPeersOfNode(requester);
-  }
-  void handleNodeStatus(const messages::Message& msg)
-  {
-    const messages::NodeStatus& nodeStatus = msg.getNodeStatus();
-
-    int64_t id = msg.getOrigin();
-
-    auto [statisticsNode, inserted] = m_clusterStatistics->getOrCreateNode(id);
-
-    statisticsNode.statusReceived();
-
-    applyMessageNodeStatusToStatsNode(
-      nodeStatus, statisticsNode, *m_communicator->m_config);
-
-    networkStatisticsNode(statisticsNode);
-
-    m_communicator->checkAndTransmitClusterStatisticsChanges();
-  }
-
-  void handleCNFTreeNodeStatusRequest(const messages::Message& msg)
-  {
-    const messages::CNFTreeNodeStatusRequest& cnfTreeNodeStatusRequest =
-      msg.getCNFTreeNodeStatusRequest();
-
-    int64_t originId = msg.getOrigin();
-    int64_t cnfId = cnfTreeNodeStatusRequest.getCnfId();
-    CNFTree::Path path = cnfTreeNodeStatusRequest.getPath();
-
-    CNF* cnf = nullptr;
-    auto [statisticsNode, inserted] =
-      m_clusterStatistics->getOrCreateNode(originId);
-    networkStatisticsNode(statisticsNode);
-
-    if(m_communicator->m_config->isDaemonMode()) {
-      auto [context, lock] =
-        m_communicator->m_config->getDaemon()->getContext(cnfId);
-      if(!context) {
-        PARACOOBA_LOG(m_logger, GlobalWarning)
-          << "CNFTreeNodeStatusRequest received before Context for ID " << cnfId
-          << " existed!";
-        return;
-      }
-      cnf = context->getRootCNF().get();
-    }
-
-    if(!cnf) {
-      PARACOOBA_LOG(m_logger, LocalWarning)
-        << "CNFTreeNodeStatusRequest received, but no CNF found for ID "
-        << cnfId << "!";
-      return;
-    }
-
-    m_communicator->requestCNFTreePathInfo(cnfTreeNodeStatusRequest);
-  }
-  void handleCNFTreeNodeStatusReply(const messages::Message& msg)
-  {
-    const messages::CNFTreeNodeStatusReply& cnfTreeNodeStatusReply =
-      msg.getCNFTreeNodeStatusReply();
-    int64_t originId = msg.getOrigin();
-    int64_t cnfId = cnfTreeNodeStatusReply.getCnfId();
-    uint64_t path = cnfTreeNodeStatusReply.getPath();
-    auto& handleStack = cnfTreeNodeStatusReply.getHandleStack();
-
-    // Depending on the handle, this is sent to the internal CNFTree handling
-    // mechanism (handle == 0) or to the webserver for viewing (handle != 0).
-
-    auto nodes = cnfTreeNodeStatusReply.getNodes();
-
-    if(nodes.size() == 0) {
-      PARACOOBA_LOG(m_logger, GlobalWarning)
-        << "Cannot parse CNFTreeNodeStatusReply message for path \""
-        << CNFTree::pathToStrNoAlloc(path)
-        << "\"! Does not contain any "
-           "nodes.";
-      return;
-    }
-
-    PARACOOBA_LOG(m_logger, Trace)
-      << "Receive CNFTree info for path " << CNFTree::pathToStrNoAlloc(path);
-
-    if(handleStack.size() == 1) {
-      // This reply arrived at the original sender! Inject all available
-      // information.
-      for(auto& nodeIt : nodes) {
-        m_communicator->injectCNFTreeNodeInfo(
-          cnfId,
-          handleStack.top(),
-          nodeIt.path,
-          static_cast<CNFTree::State>(nodeIt.state),
-          originId);
-      }
-    } else {
-      // Forward the reply to the next hop. Stack is implicitly popped.
-      messages::Message replyMsg;
-      messages::CNFTreeNodeStatusReply reply(cnfTreeNodeStatusReply);
-      replyMsg.insertCNFTreeNodeStatusReply(std::move(reply));
-      sendMessage(cnfTreeNodeStatusReply.getHandle(), replyMsg, false);
-    }
-  }
-
-  void handleSend(const boost::system::error_code& error,
-                  std::size_t bytes,
-                  std::mutex* sendBufMutex,
-                  boost::asio::streambuf* sendStreambuf,
-                  size_t bytesToSend)
-  {
-    sendBufMutex->unlock();
-
-    sendStreambuf->consume(sendStreambuf->size() + 1);
-
-    if(!error || error == boost::asio::error::message_size) {
-      if(bytes != bytesToSend) {
-        PARACOOBA_LOG(m_logger, LocalError)
-          << "Only (asynchronously) sent " << bytes << " of target "
-          << bytesToSend << "!";
-      }
-    } else {
-      PARACOOBA_LOG(m_logger, LocalError)
-        << "Error sending data from UDP socket. Error: " << error.message();
-    }
-  }
-
-  messages::Message buildMessage(int64_t targetId = 0)
-  {
-    assert(m_communicator);
-    assert(m_communicator->m_config);
-    return messages::Message(m_communicator->m_config->getInt64(Config::Id),
-                             targetId);
-  }
-
-  /** @brief Tries to send a message to the given target node (by ID) if that
-   * target exists. If it does not exist, this method returns false, else, it
-   * returns true. */
-  bool sendMessage(int64_t targetNode,
-                   const messages::Message& msg,
-                   bool fromRunner = true,
-                   bool async = false)
-  {
-    if(!m_clusterStatistics->hasNode(targetNode)) {
-      return false;
-    }
-    NetworkedNode* nn =
-      m_clusterStatistics->getNode(targetNode).getNetworkedNode();
-    if(!nn) {
-      return false;
-    }
-
-    return sendMessage(nn->getRemoteUdpEndpoint(), msg, fromRunner, async);
-  }
-
-  /** Sends a message to the given endpoint. Always returns true. */
-  bool sendMessage(boost::asio::ip::udp::endpoint endpoint,
-                   const messages::Message& msg,
-                   bool fromRunner = true,
-                   bool async = false)
-  {
-    {
-      // Lock the mutex when sending and unlock it when the data has been sent
-      // in the handleSend function. This way, async sending is still fast when
-      // calculating stuff and does not block, but it DOES block when more
-      // messages are sent.
-      //
-      // This is only required when sending from a runner thread, which is the
-      // default. Messages sent from boost asio do not need this synchronisation
-      // safe-guard.
-      if(fromRunner) {
-        m_sendBufMutex.lock();
-      }
-
-      {
-        std::ostream sendOstream(&m_sendStreambuf);
-        cereal::BinaryOutputArchive oarchive(sendOstream);
-        oarchive(msg);
-      }
-
-      size_t bytesToSend = m_sendStreambuf.size();
-
-      if(async) {
-        try {
-          m_socket.async_send_to(
-            m_sendStreambuf.data(),
-            endpoint,
-            boost::bind(&UDPServer::handleSend,
-                        this,
-                        boost::asio::placeholders::error,
-                        boost::asio::placeholders::bytes_transferred,
-                        &m_sendBufMutex,
-                        &m_sendStreambuf,
-                        bytesToSend));
-        } catch(const std::exception& e) {
-          PARACOOBA_LOG(m_logger, LocalError)
-            << "Exception encountered when sending async message to endpoint "
-            << endpoint << "! Message: " << e.what();
-        }
-      } else {
-        size_t bytes;
-        try {
-          bytes = m_socket.send_to(m_sendStreambuf.data(), endpoint);
-        } catch(const std::exception& e) {
-          PARACOOBA_LOG(m_logger, LocalError)
-            << "Exception encountered when sending message to endpoint "
-            << endpoint << "! Message: " << e.what();
-        }
-        if(bytes != bytesToSend) {
-          PARACOOBA_LOG(m_logger, LocalError)
-            << "Only (synchronously) sent " << bytes << " of target "
-            << bytesToSend << "!";
-        }
-        m_sendStreambuf.consume(m_sendStreambuf.size() + 1);
-
-        if(fromRunner) {
-          m_sendBufMutex.unlock();
-        }
-      }
-    }
-    return true;
-  }
-
-  private:
-  boost::asio::ip::address generateBroadcastAddress()
-  {
-    auto ipAddressString = std::string(
-      m_communicator->m_config->getString(Config::IPBroadcastAddress));
-    boost::system::error_code err;
-    auto address = boost::asio::ip::address::from_string(ipAddressString, err);
-    if(err) {
-      PARACOOBA_LOG(m_logger, LocalError)
-        << "Could not parse given IP Broadcast Address \"" << ipAddressString
-        << "\". Error: " << err;
-      address = boost::asio::ip::address_v4::broadcast();
-    }
-    return address;
-  }
-
-  boost::asio::ip::address generateIPAddress()
-  {
-    auto ipAddressString =
-      std::string(m_communicator->m_config->getString(Config::IPAddress));
-    boost::system::error_code err;
-    auto address = boost::asio::ip::address::from_string(ipAddressString, err);
-    if(err) {
-      PARACOOBA_LOG(m_logger, LocalError)
-        << "Could not parse given IP Address \"" << ipAddressString
-        << "\". Error: " << err;
-      address = boost::asio::ip::address_v4::any();
-    }
-    return address;
-  }
-
-  Communicator* m_communicator;
-  Logger m_logger;
-  uint16_t m_port;
-
-  udp::socket m_socket;
-  udp::endpoint m_remoteEndpoint;
-  boost::asio::streambuf m_recStreambuf;
-
-  boost::asio::ip::address m_ipAddress;
-  boost::asio::ip::address m_broadcastAddress;
-
-  ClusterStatisticsPtr m_clusterStatistics;
-
-  static thread_local boost::asio::streambuf m_sendStreambuf;
-  static thread_local std::mutex m_sendBufMutex;
-};
-
-thread_local boost::asio::streambuf Communicator::UDPServer::m_sendStreambuf;
-thread_local std::mutex Communicator::UDPServer::m_sendBufMutex;
 
 class Communicator::TCPClient : public std::enable_shared_from_this<TCPClient>
 {
@@ -1165,7 +602,7 @@ Communicator::Communicator(ConfigPtr config, LogPtr log)
   , m_ioServiceWork(m_ioService)
   , m_logger(log->createLogger("Communicator"))
   , m_signalSet(std::make_unique<boost::asio::signal_set>(m_ioService, SIGINT))
-  , m_clusterStatistics(std::make_shared<ClusterStatistics>(config, log))
+  , m_clusterStatistics(std::make_shared<ClusterStatistics>(config, log, ))
   , m_tickTimer(
       (m_ioService),
       std::chrono::milliseconds(m_config->getUint64(Config::TickMilliseconds)))
@@ -1262,7 +699,7 @@ Communicator::exit()
 
     // Destruct all servers before io Service is stopped.
     m_udpServer.reset();
-    m_tcpServer.reset();
+    m_tcpAcceptor.reset();
 
     m_ioService.stop();
   });
@@ -1324,7 +761,18 @@ Communicator::listenForIncomingTCP(uint16_t port)
 {
   using namespace boost::asio;
   try {
-    m_tcpServer = std::make_unique<TCPServer>(this, m_log, m_ioService, port);
+    auto tcpEndpoint = boost::asio::ip::tcp::endpoint(
+      ParseIPAddress(Config::getString(Config::IPAddress)),
+      Config::getUint16(Config::TCPListenPort));
+
+    m_tcpAcceptor =
+      std::make_unique<net::TCPAcceptor>(m_ioService,
+                                         tcpEndpoint,
+                                         m_log,
+                                         m_config,
+                                         *m_clusterStatistics,
+                                         *m_control,
+                                         *m_jobDescriptionReceiverProvider);
     return true;
   } catch(std::exception& e) {
     PARACOOBA_LOG(m_logger, LocalError)
@@ -1593,22 +1041,5 @@ Communicator::task_offlineAnnouncement(NetworkedNode* nn)
                              false,
                              false);
   }
-}
-
-std::ostream&
-operator<<(std::ostream& o, Communicator::TCPMode mode)
-{
-  switch(mode) {
-    case Communicator::TCPMode::TransmitCNF:
-      o << "Transmit CNF";
-      break;
-    case Communicator::TCPMode::TransmitJobDescription:
-      o << "Transmit Job Description";
-      break;
-    case Communicator::TCPMode::Unknown:
-      o << "Unknown";
-      break;
-  }
-  return o;
 }
 }

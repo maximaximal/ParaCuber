@@ -4,6 +4,7 @@
 #include "cluster-statistics.hpp"
 #include "cnftree.hpp"
 #include "log.hpp"
+#include "messages/jobdescription_receiver.hpp"
 #include "messages/jobdescription_transmitter.hpp"
 #include "readywaiter.hpp"
 #include "webserver/initiator.hpp"
@@ -27,6 +28,13 @@ namespace paracooba {
 
 namespace messages {
 class CNFTreeNodeStatusRequest;
+class JobDescriptionReceiverProvider;
+}
+
+namespace net {
+class UDPServer;
+class TCPAcceptor;
+class Control;
 }
 
 class Runner;
@@ -54,10 +62,6 @@ class Communicator
   , public messages::JobDescriptionTransmitter
 {
   public:
-  class UDPServer;
-  class TCPServer;
-  class TCPClient;
-
   /** @brief Constructor */
   Communicator(ConfigPtr config, LogPtr log);
   /** @brief Destructor */
@@ -87,18 +91,6 @@ class Communicator
     return m_clusterStatistics;
   }
 
-  inline int64_t getAndIncrementCurrentMessageId()
-  {
-    return m_currentMessageId++;
-  }
-
-  enum class TCPMode
-  {
-    TransmitCNF,
-    TransmitJobDescription,
-    Unknown
-  };
-
   void sendCNFToNode(std::shared_ptr<CNF> cnf, int64_t targetID);
 
   void injectCNFTreeNodeInfo(int64_t cnfId,
@@ -124,6 +116,12 @@ class Communicator
   Logger m_logger;
   std::unique_ptr<boost::asio::signal_set> m_signalSet;
   RunnerPtr m_runner;
+
+  std::unique_ptr<net::Control> m_control;
+
+  std::unique_ptr<net::UDPServer> m_udpServer;
+  std::unique_ptr<net::TCPAcceptor> m_tcpAcceptor;
+
   ClusterStatisticsPtr m_clusterStatistics;
 
   int64_t m_currentMessageId = INT64_MIN;
@@ -135,9 +133,6 @@ class Communicator
   // Listeners
   bool listenForIncomingUDP(uint16_t port);
   bool listenForIncomingTCP(uint16_t port);
-
-  std::unique_ptr<UDPServer> m_udpServer;
-  std::unique_ptr<TCPServer> m_tcpServer;
 
   // Tasks
   void task_announce(NetworkedNode* nn = nullptr);
@@ -156,9 +151,6 @@ class Communicator
 
   std::unique_ptr<webserver::Initiator> m_webserverInitiator;
 };
-
-std::ostream&
-operator<<(std::ostream& o, Communicator::TCPMode mode);
 
 using CommunicatorPtr = std::shared_ptr<Communicator>;
 }

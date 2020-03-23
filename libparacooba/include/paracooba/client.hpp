@@ -7,6 +7,8 @@
 #include "log.hpp"
 #include "taskresult.hpp"
 
+#include "messages/jobdescription_receiver.hpp"
+
 namespace paracooba {
 class Config;
 class Communicator;
@@ -15,7 +17,7 @@ class TaskFactory;
 
 /** @brief Main interaction point with the solver as a user.
  */
-class Client
+class Client : public messages::JobDescriptionReceiverProvider
 {
   public:
   /** @brief Constructor
@@ -25,7 +27,7 @@ class Client
          std::shared_ptr<Communicator> communicator);
   /** @brief Destructor.
    */
-  ~Client();
+  virtual ~Client();
 
   /** @brief Read DIMACS file into the internal solver instance, get path from
    * config. */
@@ -51,6 +53,9 @@ class Client
   {
     return m_satAssignment;
   };
+
+  virtual messages::JobDescriptionReceiver* getJobDescriptionReceiver(
+    int64_t subject);
 
   private:
   ConfigPtr m_config;

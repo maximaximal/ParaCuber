@@ -15,9 +15,13 @@
 #include <string>
 
 namespace paracooba {
-ClusterStatistics::ClusterStatistics(ConfigPtr config, LogPtr log)
+ClusterStatistics::ClusterStatistics(
+  ConfigPtr config,
+  LogPtr log,
+  messages::MessageTransmitter& statelessMessageTransmitter)
   : m_config(config)
   , m_logger(log->createLogger("ClusterStatistics"))
+  , m_statelessMessageTransmitter(statelessMessageTransmitter)
 {}
 
 ClusterStatistics::~ClusterStatistics() {}
@@ -25,8 +29,10 @@ ClusterStatistics::~ClusterStatistics() {}
 void
 ClusterStatistics::initLocalNode()
 {
-  ClusterNode thisNode(
-    m_changed, m_config->getInt64(Config::Id), m_config->getInt64(Config::Id));
+  ClusterNode thisNode(m_changed,
+                       m_config->getInt64(Config::Id),
+                       m_config->getInt64(Config::Id),
+                       m_statelessMessageTransmitter);
   thisNode.setDaemon(m_config->isDaemonMode());
   thisNode.setDistance(1);
   thisNode.setFullyKnown(true);
@@ -69,8 +75,10 @@ ClusterStatistics::getNode(ID id)
 ClusterNodeStore::ClusterNodeCreationPair
 ClusterStatistics::getOrCreateNode(ID id)
 {
-  auto [it, inserted] = m_nodeMap.emplace(
-    std::pair{ id, ClusterNode(m_changed, m_thisNode->getId(), id) });
+  auto [it, inserted] = m_nodeMap.emplace(std::pair{
+    id,
+    ClusterNode(
+      m_changed, m_thisNode->getId(), id, m_statelessMessageTransmitter) });
   return { it->second, inserted };
 }
 

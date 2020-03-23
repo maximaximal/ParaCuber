@@ -88,7 +88,7 @@ class Connection
     ClusterNodeStore& clusterNodeStore;
     messages::MessageReceiver& messageReceiver;
     messages::JobDescriptionReceiverProvider& jobDescriptionReceiverProvider;
-    NetworkedNode* nn = nullptr;
+    NetworkedNode* remoteNN = nullptr;
     std::shared_ptr<CNF> cnf;
 
     boost::asio::streambuf recvStreambuf = boost::asio::streambuf();
@@ -182,7 +182,7 @@ class Connection
   ClusterNodeStore& clusterNodeStore() { return m_state->clusterNodeStore; }
   ContextPtr& context() { return m_state->context; }
   std::shared_ptr<CNF>& cnf() { return m_state->cnf; }
-  NetworkedNode*& remoteNN() { return m_state->nn; }
+  NetworkedNode*& remoteNN() { return m_state->remoteNN; }
   messages::MessageReceiver& messageReceiver()
   {
     return m_state->messageReceiver;
@@ -212,6 +212,7 @@ class Connection
   void receiveSerializedMessage(size_t bytes_received);
 
   void popNextSendItem();
+  bool initRemoteNN();
 
   void enrichLogger();
 };

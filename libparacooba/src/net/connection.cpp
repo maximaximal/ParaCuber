@@ -1,4 +1,6 @@
 #include "../../include/paracooba/net/connection.hpp"
+#include "../../include/paracooba/cluster-node-store.hpp"
+#include "../../include/paracooba/cluster-node.hpp"
 #include "../../include/paracooba/cnf.hpp"
 #include "../../include/paracooba/config.hpp"
 #include "../../include/paracooba/messages/jobdescription.hpp"
@@ -43,8 +45,18 @@ Connection::State::~State()
 {
   PARACOOBA_LOG(logger, Trace)
     << "Connection Ended with resume mode " << resumeMode;
+  remoteNN->removeActiveTCPClient();
+
   switch(resumeMode) {
     case RestartAfterShutdown:
+      // Attempt restart.
+      Connection conn(ioService,
+                      log,
+                      config,
+                      clusterNodeStore,
+                      msgReceiver,
+                      jdReceiverProvider);
+      conn.connect(*remoteNN);
       break;
     case EndAfterShutdown:
       break;
@@ -123,6 +135,10 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
 
   enrichLogger();
 
+  if(remoteNN()->deletionRequested()) {
+    return;
+  }
+
   if(!ec) {
     reenter(&readCoro())
     {
@@ -134,7 +150,13 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
 
       yield async_read(socket(), BUF(remoteId), rh);
 
+      if(!initRemoteNN()) {
+        // Exit coroutine and connection. This connection is already established
+        // and is full duplex, the other direction is not required!
+        yield break;
+      }
       connectionEstablished() = true;
+      remoteNN()->addActiveTCPClient();
 
       // Handshake finished, both sides know about the other side. Communication
       // can begin now. Communication runs in a loop, as unlimited messages may
@@ -400,6 +422,25 @@ Connection::popNextSendItem()
   currentSendItem() = std::move(sendQueue().front().sendItem);
   sendQueue().pop();
   writeHandler();
+}
+
+bool
+Connection::initRemoteNN()
+{
+  auto [node, inserted] = clusterNodeStore().getOrCreateNode(remoteId());
+  NetworkedNode* nn = node.getNetworkedNode();
+
+  enrichLogger();
+  if(nn->assignConnection(*this)) {
+    PARACOOBA_LOG(logger(), NetTrace)
+      << "Initiated Remote NN, connection established.";
+    return true;
+  } else {
+    PARACOOBA_LOG(logger(), NetTrace)
+      << "Initiated Remote NN, but connection not required, as it was already "
+         "initialized previously. Connection is dropped.";
+    return false;
+  }
 }
 
 std::ostream&

@@ -54,10 +54,21 @@ class JDReceiverProvider : public JobDescriptionReceiverProvider
 class ClNodeStore : public ClusterNodeStore
 {
   public:
-  virtual const ClusterNode& getNode(int64_t id) const {};
-  virtual ClusterNode& getNode(int64_t id){};
-  virtual ClusterNodeCreationPair getOrCreateNode(ID id){};
-  virtual bool hasNode(ID id) { return false; };
+  ClNodeStore(paracooba::messages::MessageTransmitter& msgTransmitter)
+    : node(changed, 1, 2, msgTransmitter)
+  {}
+
+  virtual const ClusterNode& getNode(int64_t id) const { return node; };
+  virtual ClusterNode& getNode(int64_t id) { return node; };
+  virtual ClusterNodeCreationPair getOrCreateNode(ID id)
+  {
+    return { node, false };
+  };
+  virtual bool hasNode(ID id) { return true; };
+
+  private:
+  bool changed = false;
+  ClusterNode node;
 };
 
 TEST_CASE("Initiate a paracooba::net::Connection")
@@ -80,7 +91,12 @@ TEST_CASE("Initiate a paracooba::net::Connection")
   MsgReceiver msgReceiver2;
   JDReceiverProvider jdReceiverProvider2;
 
-  ClNodeStore clusterNodeStore;
+  // This is never called internally in this test, but the constructor and
+  // internal NetworkedNode invariants require a MessageTransmitter instance.
+  int dummy;
+  messages::MessageTransmitter* dummyStatelessMessageTransmitter =
+    reinterpret_cast<messages::MessageTransmitter*>(&dummy);
+  ClNodeStore clusterNodeStore(*dummyStatelessMessageTransmitter);
 
   Connection conn1(ioService,
                    log1,
@@ -95,9 +111,8 @@ TEST_CASE("Initiate a paracooba::net::Connection")
                    msgReceiver2,
                    jdReceiverProvider2);
 
-  NetworkedNode nn(boost::asio::ip::udp::endpoint(
-                     boost::asio::ip::address_v4::loopback(), 17170),
-                   10);
+  NetworkedNode nn(10, *dummyStatelessMessageTransmitter);
+
   auto localEndpoint = boost::asio::ip::tcp::endpoint(
     boost::asio::ip::address_v4::loopback(), 17171);
 

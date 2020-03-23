@@ -139,4 +139,20 @@ Client::solve()
       0, TaskFactory::CubeOrSolve, m_config->getInt64(Config::Id));
   });
 }
+
+messages::JobDescriptionReceiver*
+Client::getJobDescriptionReceiver(int64_t subject)
+{
+  assert(m_rootCNF);
+
+  if(subject != m_rootCNF->getOriginId()) {
+    PARACOOBA_LOG(m_logger, LocalError)
+      << "Requested subject with ID " << subject
+      << " does not match only CNF on this client with ID "
+      << m_rootCNF->getOriginId();
+    return nullptr;
+  }
+
+  return m_rootCNF.get();
+}
 }// namespace paracooba

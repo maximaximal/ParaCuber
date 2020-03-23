@@ -1,6 +1,7 @@
 #ifndef PARACOOBA_MESSAGES_CNFTREE_NODE_STATUS_REPLY
 #define PARACOOBA_MESSAGES_CNFTREE_NODE_STATUS_REPLY
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <vector>
