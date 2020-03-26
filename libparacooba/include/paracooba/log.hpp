@@ -67,7 +67,7 @@ class Log
   {
     Handle(LoggerType logger, Log& log)
       : logger(logger)
-      , log(log)
+      , log(&log)
     {}
     Handle(const Handle& o)
       : logger(o.logger)
@@ -80,7 +80,7 @@ class Log
       return *this;
     }
     LoggerType logger;
-    Log& log;
+    Log* log;
   };
 
   using Logger = Handle<boost::log::sources::severity_logger<Log::Severity>>;
@@ -101,7 +101,10 @@ class Log
   LoggerMT createLoggerMT(const std::string& context,
                           const std::string& meta = "");
 
-  bool isLogLevelEnabled(Severity severity);
+  inline bool isLogLevelEnabled(Severity severity) const
+  {
+    return severity >= m_targetSeverity;
+  }
 
   struct ThreadLocalData
   {
@@ -111,20 +114,22 @@ class Log
 
     std::string threadName;
   };
-  std::map<std::thread::id, ThreadLocalData> threadLocalData;
-  ThreadLocalData& getThreadLocalData()
+  const ThreadLocalData& getThreadLocalData() const
   {
-    auto it = threadLocalData.find(std::this_thread::get_id());
-    assert(it != threadLocalData.end());
+    std::shared_lock lock(m_threadLocalDataMutex);
+    auto id = std::this_thread::get_id();
+    auto it = m_threadLocalData.find(id);
+    assert(it != m_threadLocalData.end());
     return it->second;
   }
   void initLocalThread(const std::string& threadName)
   {
+    std::unique_lock lock(m_threadLocalDataMutex);
     auto id = std::this_thread::get_id();
-    assert(!threadLocalData.count(id));
-    threadLocalData.insert(std::make_pair(id, ThreadLocalData(threadName)));
+    assert(!m_threadLocalData.count(id));
+    m_threadLocalData.insert(std::make_pair(id, ThreadLocalData(threadName)));
   }
-  std::string_view getLocalName();
+  std::string_view getLocalName() const;
 
   private:
   ConfigPtr m_config;
@@ -132,6 +137,9 @@ class Log
     boost::log::sinks::basic_text_ostream_backend<char>>>
     m_consoleSink;
   Severity m_targetSeverity = LocalWarning;
+
+  std::map<std::thread::id, ThreadLocalData> m_threadLocalData;
+  mutable std::shared_mutex m_threadLocalDataMutex;
 };
 
 using Logger = Log::Logger;
@@ -152,12 +160,12 @@ operator<<(
   fileAttr.set(FILE_BASENAME);   \
   functionAttr.set(__PRETTY_FUNCTION__);
 
-#define PARACOOBA_LOG(LOGGER, SEVERITY)                               \
-  do {                                                                \
-    PARACOOBA_LOG_LOCATION()                                          \
-    localNameAttr.set((LOGGER).log.getLocalName());                   \
-    threadNameAttr.set((LOGGER).log.getThreadLocalData().threadName); \
-  } while(false);                                                     \
+#define PARACOOBA_LOG(LOGGER, SEVERITY)                                       \
+  if((LOGGER).log->isLogLevelEnabled(::paracooba::Log::Severity::SEVERITY)) { \
+    PARACOOBA_LOG_LOCATION()                                                  \
+    localNameAttr.set((LOGGER).log->getLocalName());                          \
+    threadNameAttr.set((LOGGER).log->getThreadLocalData().threadName);        \
+  }                                                                           \
   BOOST_LOG_SEV((LOGGER).logger, ::paracooba::Log::Severity::SEVERITY)
 
 #endif

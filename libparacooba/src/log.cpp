@@ -170,14 +170,8 @@ Log::createLoggerMT(const std::string& context, const std::string& meta)
     *this);
 }
 
-bool
-Log::isLogLevelEnabled(Severity sev)
-{
-  return sev >= m_targetSeverity;
-}
-
 std::string_view
-Log::getLocalName()
+Log::getLocalName() const
 {
   return m_config->getString(Config::LocalName);
 }
