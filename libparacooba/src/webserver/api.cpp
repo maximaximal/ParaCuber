@@ -29,7 +29,7 @@ API::~API() {}
 
 void
 API::injectCNFTreeNode(int64_t handle,
-                       CNFTree::Path p,
+                       Path p,
                        CNFTree::State state,
                        int64_t remote)
 {
@@ -178,7 +178,7 @@ API::handleWebSocketRequest(const boost::asio::ip::tcp::socket* socket,
                                   sendError(data, "CNFTree path too long!"));
     }
 
-    CNFTree::Path p = CNFTree::strToPath(strPath.data(), strPath.length());
+    Path p = CNFTree::strToPath(strPath.data(), strPath.length());
     m_config->getCommunicator()->requestCNFTreePathInfo(
       messages::CNFTreeNodeStatusRequest(
         reinterpret_cast<int64_t>(socket), p, data.cnfId));
@@ -225,7 +225,7 @@ API::sendError(WSData& d, const std::string& str)
 
 bool
 API::handleInjectedCNFTreeNode(WSData& d,
-                               CNFTree::Path p,
+                               Path p,
                                CNFTree::State state,
                                int64_t remote)
 {

@@ -25,7 +25,7 @@ Cuber::literalOccurenceMapToLiteralMap(LiteralMap& target,
   std::transform(source.begin(),
                  source.end(),
                  std::back_inserter(target),
-                 [](const LiteralOccurence& occ) -> CNFTree::CubeVar {
+                 [](const LiteralOccurence& occ) -> Literal {
                    return occ.literal;
                  });
 }

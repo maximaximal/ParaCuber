@@ -88,7 +88,7 @@ CaDiCaLTask::copyFromCaDiCaLTask(const CaDiCaLTask& other)
 }
 
 void
-CaDiCaLTask::applyCubeFromCuberDeferred(CNFTree::Path p, cuber::Cuber& cuber)
+CaDiCaLTask::applyCubeFromCuberDeferred(Path p, cuber::Cuber& cuber)
 {
   m_name = "Solver Task for Path " + CNFTree::pathToStdString(p);
   m_path = p;
@@ -97,7 +97,7 @@ CaDiCaLTask::applyCubeFromCuberDeferred(CNFTree::Path p, cuber::Cuber& cuber)
 }
 
 void
-CaDiCaLTask::applyCubeDeferred(CNFTree::Path p, const Cube& cube)
+CaDiCaLTask::applyCubeDeferred(Path p, const Cube& cube)
 {
   m_name =
     "Solver Task for Path " + CNFTree::pathToStdString(p) + " with given cube";
@@ -107,7 +107,7 @@ CaDiCaLTask::applyCubeDeferred(CNFTree::Path p, const Cube& cube)
 }
 
 void
-CaDiCaLTask::applyCube(CNFTree::Path p, const Cube& cube)
+CaDiCaLTask::applyCube(Path p, const Cube& cube)
 {
   provideSolver();
 
@@ -120,7 +120,7 @@ CaDiCaLTask::applyCube(CNFTree::Path p, const Cube& cube)
   }
 }
 void
-CaDiCaLTask::applyCubeFromCuber(CNFTree::Path p, cuber::Cuber& cuber)
+CaDiCaLTask::applyCubeFromCuber(Path p, cuber::Cuber& cuber)
 {
   provideSolver();
 
@@ -151,7 +151,7 @@ CaDiCaLTask::readDIMACSFile(std::string_view sourcePath)
 }
 
 void
-CaDiCaLTask::readCNF(std::shared_ptr<CNF> cnf, CNFTree::Path path)
+CaDiCaLTask::readCNF(std::shared_ptr<CNF> cnf, Path path)
 {
   m_cnf = cnf;
   m_path = path;

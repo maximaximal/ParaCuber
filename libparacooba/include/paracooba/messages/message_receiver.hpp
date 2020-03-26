@@ -3,8 +3,11 @@
 
 #include <functional>
 
+#include "../types.hpp"
+
 namespace paracooba {
 class NetworkedNode;
+class Config;
 
 namespace messages {
 class Message;
@@ -20,7 +23,18 @@ class MessageTransmitter
   public:
   virtual void transmitMessage(const Message& jd,
                                NetworkedNode& nn,
-                               std::function<void(bool)> sendFinishedCB) = 0;
+                               SuccessCB sendFinishedCB = EmptySuccessCB) = 0;
+
+  void onlineAnnouncement(const Config& cfg,
+                          NetworkedNode& nn,
+                          SuccessCB sendFinishedCB = EmptySuccessCB);
+
+  void offlineAnnouncement(const Config& cfg,
+                           NetworkedNode& nn,
+                           const std::string& reason,
+                           SuccessCB sendFinishedCB = EmptySuccessCB);
+
+  messages::Message buildMessage(const Config& config);
 };
 }
 }

@@ -5,7 +5,6 @@
 #include "cnftree.hpp"
 #include "log.hpp"
 #include "messages/jobdescription_receiver.hpp"
-#include "messages/jobdescription_transmitter.hpp"
 #include "readywaiter.hpp"
 #include "webserver/initiator.hpp"
 
@@ -57,9 +56,7 @@ using ClusterStatisticsPtr = std::shared_ptr<ClusterStatistics>;
  *
  * \dotfile solver-network-flow.dot
  */
-class Communicator
-  : public std::enable_shared_from_this<Communicator>
-  , public messages::JobDescriptionTransmitter
+class Communicator : public std::enable_shared_from_this<Communicator>
 {
   public:
   /** @brief Constructor */
@@ -91,20 +88,14 @@ class Communicator
     return m_clusterStatistics;
   }
 
-  void sendCNFToNode(std::shared_ptr<CNF> cnf, int64_t targetID);
-
   void injectCNFTreeNodeInfo(int64_t cnfId,
                              int64_t handle,
-                             CNFTree::Path p,
+                             Path p,
                              CNFTree::State state,
                              int64_t remote);
 
   void requestCNFTreePathInfo(
     const messages::CNFTreeNodeStatusRequest& request);
-
-  virtual void transmitJobDescription(messages::JobDescription&& jd,
-                                      int64_t id,
-                                      std::function<void(bool)> sendFinishedCB);
 
   private:
   friend class webserver::API;
@@ -113,6 +104,7 @@ class Communicator
   LogPtr m_log;
   boost::asio::io_service m_ioService;
   boost::asio::io_service::work m_ioServiceWork;
+
   Logger m_logger;
   std::unique_ptr<boost::asio::signal_set> m_signalSet;
   RunnerPtr m_runner;
@@ -130,16 +122,11 @@ class Communicator
 
   void checkAndTransmitClusterStatisticsChanges(bool force = false);
 
+  messages::JobDescriptionReceiverProvider& getJobDescriptionReceiverProvider();
+
   // Listeners
   bool listenForIncomingUDP(uint16_t port);
   bool listenForIncomingTCP(uint16_t port);
-
-  // Tasks
-  void task_announce(NetworkedNode* nn = nullptr);
-  void task_requestAnnounce(int64_t id = 0,
-                            std::string regex = "",
-                            NetworkedNode* nn = nullptr);
-  void task_offlineAnnouncement(NetworkedNode* nn = nullptr);
 
   /** @brief Ticks are called every 100ms.
    *

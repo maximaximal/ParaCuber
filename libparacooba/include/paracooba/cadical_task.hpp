@@ -64,8 +64,8 @@ class CaDiCaLTask : public Task
    */
   void copyFromCaDiCaLTask(const CaDiCaLTask& other);
 
-  void applyCubeFromCuberDeferred(CNFTree::Path p, cuber::Cuber& cuber);
-  void applyCubeDeferred(CNFTree::Path, const Cube& cube);
+  void applyCubeFromCuberDeferred(Path p, cuber::Cuber& cuber);
+  void applyCubeDeferred(Path, const Cube& cube);
 
   /** @brief Queue parsing a DIMACS file into the internal solver instance.
    *
@@ -79,7 +79,7 @@ class CaDiCaLTask : public Task
    * The root CNF gets parsed directly, other CNFs (cubes) are applied to the
    * current state. This makes this function useful in conjunction with
    * initialising this task from an old task that already finished. */
-  void readCNF(std::shared_ptr<CNF> cnf, CNFTree::Path path);
+  void readCNF(std::shared_ptr<CNF> cnf, Path path);
 
   virtual TaskResultPtr execute();
   virtual void terminate();
@@ -108,14 +108,14 @@ class CaDiCaLTask : public Task
   private:
   void provideSolver();
 
-  void applyCube(CNFTree::Path p, const Cube& cube);
-  void applyCubeFromCuber(CNFTree::Path p, cuber::Cuber& cuber);
+  void applyCube(Path p, const Cube& cube);
+  void applyCubeFromCuber(Path p, cuber::Cuber& cuber);
 
   friend class Terminator;
   std::unique_ptr<Terminator> m_terminator;
   std::shared_ptr<CNF> m_cnf;
   Mode m_mode = ParseAndSolve;
-  CNFTree::Path m_path = CNFTree::DefaultUninitiatedPath;
+  Path m_path = CNFTree::DefaultUninitiatedPath;
   cuber::Cuber* m_cuber = nullptr;
   OptionalCube m_optionalCube;
   std::vector<int> m_pregeneratedCubes;

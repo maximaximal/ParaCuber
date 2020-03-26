@@ -58,12 +58,12 @@ Registry::getActiveCuber() const
 }
 
 bool
-Registry::shouldGenerateTreeSplit(CNFTree::Path path)
+Registry::shouldGenerateTreeSplit(Path path)
 {
   return getActiveCuber().shouldGenerateTreeSplit(path);
 }
 bool
-Registry::getCube(CNFTree::Path path, std::vector<int>& literals)
+Registry::getCube(Path path, Cube& literals)
 {
   return getActiveCuber().getCube(path, literals);
 }

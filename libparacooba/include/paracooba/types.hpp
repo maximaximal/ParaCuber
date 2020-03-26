@@ -8,15 +8,18 @@
 
 namespace paracooba {
 using Literal = int;
-using Cube = std::vector<Literal>;
+using LiteralMap = std::vector<Literal>;
+using Cube = LiteralMap;
 using OptionalCube = std::optional<Cube>;
 
 using ID = int64_t;
+using Path = uint64_t;
 
 class ClusterNode;
 using ClusterNodeMap = std::map<ID, ClusterNode>;
 
 using SuccessCB = std::function<void(bool)>;
+static SuccessCB EmptySuccessCB = [](bool) {};
 }
 
 #endif

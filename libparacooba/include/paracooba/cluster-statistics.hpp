@@ -30,21 +30,26 @@ class ClusterStatistics : public ClusterNodeStore
   public:
   /** @brief Constructor
    */
-  ClusterStatistics(ConfigPtr config,
-                    LogPtr log,
-                    messages::MessageTransmitter& statelessMessageTransmitter);
+  ClusterStatistics(ConfigPtr config, LogPtr log);
   /** @brief Destructor.
    */
   ~ClusterStatistics();
 
   void initLocalNode();
 
+  void setStatelessMessageTransmitter(
+    messages::MessageTransmitter& statelessMessageTransmitter)
+  {
+    m_statelessMessageTransmitter = &statelessMessageTransmitter;
+  }
+
   using HandledNodesSet = std::set<ClusterNode*>;
 
   virtual const ClusterNode& getNode(ID id) const;
   virtual ClusterNode& getNode(ID id);
   virtual ClusterNodeCreationPair getOrCreateNode(ID id);
-  virtual bool hasNode(ID id);
+  virtual bool hasNode(ID id) const;
+  virtual void removeNode(int64_t id, const std::string& reason);
 
   friend std::ostream& operator<<(std::ostream& o, const ClusterStatistics& c)
   {
@@ -101,13 +106,12 @@ class ClusterStatistics : public ClusterNodeStore
   protected:
   friend class Communicator;
   ClusterNode& addNode(ClusterNode&& node);
-  void removeNode(int64_t id, const std::string& reason);
 
   private:
   ClusterNodeMap m_nodeMap;
   ClusterNode* m_thisNode;
   bool m_changed = false;
-  messages::MessageTransmitter& m_statelessMessageTransmitter;
+  messages::MessageTransmitter* m_statelessMessageTransmitter = nullptr;
 
   void unsafeRemoveNode(int64_t id, const std::string& reason);
 

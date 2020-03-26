@@ -17,7 +17,7 @@ TEST_CASE("TaskFactory Manipulation")
 
   TaskFactory factory(config, log, nullptr);
 
-  CNFTree::Path p = CNFTree::buildPath(static_cast<uint8_t>(0b01010101), 8);
+  Path p = CNFTree::buildPath(static_cast<uint8_t>(0b01010101), 8);
 
   REQUIRE(!factory.canProduceTask());
   REQUIRE(!factory.produceTask().task);
@@ -41,8 +41,8 @@ TEST_CASE("PathFactory Automatic Priority Sorting")
 
   TaskFactory factory(config, log, nullptr);
 
-  CNFTree::Path p1 = CNFTree::buildPath(static_cast<uint8_t>(0b01010101), 8);
-  CNFTree::Path p2 = CNFTree::buildPath(static_cast<uint8_t>(0b01010101), 7);
+  Path p1 = CNFTree::buildPath(static_cast<uint8_t>(0b01010101), 8);
+  Path p2 = CNFTree::buildPath(static_cast<uint8_t>(0b01010101), 7);
   factory.addPath(p1, TaskFactory::Mode::CubeOrSolve, 0);
   factory.addPath(p2, TaskFactory::Mode::CubeOrSolve, 0);
   REQUIRE(factory.canProduceTask());

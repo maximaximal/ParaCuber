@@ -27,6 +27,7 @@ class NetworkedNode;
 class CaDiCaLTask;
 class TaskFactory;
 class TaskSkeleton;
+class ClusterNodeStore;
 
 namespace cuber {
 class Registry;
@@ -48,6 +49,7 @@ class CNF
   CNF(ConfigPtr config,
       LogPtr log,
       int64_t originId,
+      ClusterNodeStore& clusterNodeStore,
       std::string_view dimacsFile = "");
 
   /** @brief Copy another CNF formula.
@@ -66,7 +68,7 @@ class CNF
 
   struct Result
   {
-    CNFTree::Path p;
+    Path p;
     CNFTree::State state;
     uint32_t size = 0;
     bool finished = false;
@@ -81,7 +83,7 @@ class CNF
   struct ReceiveDataStruct
   {
     ReceiveState state = ReceiveFileName;
-    CNFTree::Path path = 0;
+    Path path = 0;
     uint8_t currentDepth = 0;
     size_t receiveVarPos = 0;
     char receiveVarBuf[8];
@@ -106,7 +108,7 @@ class CNF
                 const TaskSkeleton& skel,
                 SendFinishedCB finishedCB);
 
-  void sendResult(int64_t id, CNFTree::Path p, SendFinishedCB finishedCallback);
+  void sendResult(int64_t id, Path p, SendFinishedCB finishedCallback);
 
   /** @brief Receive DIMACS file.
    *
@@ -133,20 +135,18 @@ class CNF
 
   CNFTree& getCNFTree() { return *m_cnfTree; }
 
-  void requestInfoGlobally(CNFTree::Path p, int64_t handle = 0);
+  void requestInfoGlobally(Path p, int64_t handle = 0);
 
   void setTaskFactory(TaskFactory* f) { m_taskFactory = f; }
   TaskFactory* getTaskFactory() const { return m_taskFactory; }
 
-  void solverFinishedSlot(const TaskResult& result, CNFTree::Path path);
+  void solverFinishedSlot(const TaskResult& result, Path path);
 
   void handleFinishedResultReceived(const Result& result, int64_t sentFromId);
 
   ResultFoundSignal& getResultFoundSignal() { return m_resultSignal; }
 
-  void insertResult(CNFTree::Path p,
-                    CNFTree::State state,
-                    CNFTree::Path source);
+  void insertResult(Path p, CNFTree::State state, Path source);
 
   size_t getNumberOfUnansweredRemoteWork() const
   {
@@ -164,13 +164,14 @@ class CNF
   {
     off_t offset = 0;
     SendFinishedCB cb;
-    std::vector<CNFTree::CubeVar> decisions;
+    Cube decisions;
   };
 
   ConfigPtr m_config;
   LogPtr m_log;
   Logger m_logger;
   std::mutex m_loggerMutex;
+  ClusterNodeStore& m_clusterNodeStore;
 
   void connectToCNFTreeSignal();
 
@@ -180,8 +181,6 @@ class CNF
   std::string m_dimacsFile = "";
 
   CubingKind m_cubingKind = LiteralFrequency;
-
-  messages::JobDescriptionTransmitter* m_jobDescriptionTransmitter;
 
   // Ofstream for outputting the original CNF file.
   std::ofstream m_ofstream;
@@ -199,7 +198,7 @@ class CNF
   std::unique_ptr<CNFTree> m_cnfTree;
   std::shared_mutex m_resultsMutex;
 
-  std::map<CNFTree::Path, Result> m_results;
+  std::map<Path, Result> m_results;
 
   TaskFactory* m_taskFactory = nullptr;
   ResultFoundSignal m_resultSignal;

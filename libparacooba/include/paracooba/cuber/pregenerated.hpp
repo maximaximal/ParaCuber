@@ -20,8 +20,8 @@ class Pregenerated : public Cuber
   bool init();
   const messages::JobInitiator& getJobInitiator() { return m_ji; }
 
-  virtual bool shouldGenerateTreeSplit(CNFTree::Path path);
-  virtual bool getCube(CNFTree::Path path, std::vector<int>& literals);
+  virtual bool shouldGenerateTreeSplit(Path path);
+  virtual bool getCube(Path path, std::vector<int>& literals);
 
   private:
   size_t m_counter = 0;

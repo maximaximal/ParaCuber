@@ -10,7 +10,7 @@
 #include <stdexcept>
 
 namespace paracooba {
-const size_t CNFTree::maxPathDepth = sizeof(CNFTree::Path) * 8 - 6;
+const size_t CNFTree::maxPathDepth = sizeof(Path) * 8 - 6;
 
 CNFTree::CNFTree(LogPtr log,
                  CNF& rootCNF,
@@ -135,13 +135,13 @@ CNFTree::getOffloadTargetNodeID(Path p)
   return 0;
 }
 
-CNFTree::Path
+Path
 CNFTree::getTopmostAvailableParent(Path p) const
 {
   std::lock_guard lock(m_nodeMapMutex);
   return getTopmostAvailableParentInner(p);
 }
-CNFTree::Path
+Path
 CNFTree::getTopmostAvailableParentInner(Path p) const
 {
   const Node* n = getNode(p);
@@ -331,7 +331,7 @@ CNFTree::setCNFResult(Path p, State state, Path source)
   rootCNF->insertResult(cleanupPath(p), state, cleanupPath(source));
 }
 
-CNFTree::Path
+Path
 CNFTree::strToPath(const char* str, size_t len)
 {
   Path p = CNFTree::setDepth(0, len);

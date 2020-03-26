@@ -209,7 +209,8 @@ Daemon::getOrCreateContext(int64_t id)
   bool inserted = false;
   if(it == m_contextMap.end()) {
     // Create the new context with a new CNF.
-    auto rootCNF = std::make_shared<CNF>(m_config, m_log, id);
+    auto rootCNF = std::make_shared<CNF>(
+      m_config, m_log, id, *m_communicator->getClusterStatistics());
     auto [statsNode, inserted] =
       m_communicator->getClusterStatistics()->getOrCreateNode(id);
     auto p = std::make_pair(

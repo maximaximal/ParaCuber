@@ -36,6 +36,7 @@ namespace messages {
 class MessageTransmitter;
 class NodeStatus;
 class OnlineAnnouncement;
+class AnnouncementRequest;
 class Node;
 }
 
@@ -191,6 +192,10 @@ class ClusterNode
     return ((float)m_workQueueSize / (float)m_availableWorkers) > 1.5;
   }
 
+  /** @brief Returns true if this node was created because of an
+   * AnnouncementRequest control message. */
+  bool initializedByPeer() const { return m_initializedByPeer; }
+
   size_t getSlotsLeft() const
   {
     return static_cast<uint64_t>(m_availableWorkers) -
@@ -239,6 +244,8 @@ class ClusterNode
   void applyMessageNode(const messages::Node& node);
   void applyOnlineAnnouncementMessage(
     const messages::OnlineAnnouncement& onlineAnnouncement);
+  void applyAnnouncementRequestMessage(
+    const messages::AnnouncementRequest& announcementRequest);
   void applyNodeStatusMessage(const messages::NodeStatus& nodeStatus);
 
   private:
@@ -262,6 +269,7 @@ class ClusterNode
   int64_t m_thisId = 0;
   bool m_fullyKnown = false;
   bool m_daemon = false;
+  bool m_initializedByPeer = false;
   uint8_t m_distance = 2;
 
   NodeOfflineSignal m_nodeOfflineSignal;

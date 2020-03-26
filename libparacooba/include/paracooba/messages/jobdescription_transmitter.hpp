@@ -3,6 +3,8 @@
 
 #include <functional>
 
+#include "../types.hpp"
+
 namespace paracooba {
 class NetworkedNode;
 
@@ -12,10 +14,9 @@ class JobDescription;
 class JobDescriptionTransmitter
 {
   public:
-  virtual void transmitJobDescription(
-    JobDescription&& jd,
-    int64_t id,
-    std::function<void(bool)> sendFinishedCB) = 0;
+  virtual void transmitJobDescription(JobDescription&& jd,
+                                      NetworkedNode& nn,
+                                      SuccessCB sendFinishedCB);
 };
 }
 }

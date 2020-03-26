@@ -5,7 +5,7 @@ using namespace paracooba;
 
 TEST_CASE("CNFTree::Path manipulation")
 {
-  CNFTree::Path p = 0;
+  Path p = 0;
   REQUIRE(CNFTree::getDepth(p) == 0);
   REQUIRE(CNFTree::getPath(p) == 0);
 

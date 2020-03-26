@@ -4,6 +4,7 @@
 #include <boost/asio/placeholders.hpp>
 #include <catch2/catch.hpp>
 #include <chrono>
+#include <memory>
 #include <paracooba/cluster-node-store.hpp>
 #include <paracooba/config.hpp>
 #include <paracooba/net/connection.hpp>
@@ -55,20 +56,40 @@ class ClNodeStore : public ClusterNodeStore
 {
   public:
   ClNodeStore(paracooba::messages::MessageTransmitter& msgTransmitter)
-    : node(changed, 1, 2, msgTransmitter)
+    : statelessMessageTransmitter(msgTransmitter)
   {}
 
-  virtual const ClusterNode& getNode(int64_t id) const { return node; };
-  virtual ClusterNode& getNode(int64_t id) { return node; };
+  virtual const ClusterNode& getNode(ID id) const
+  {
+    assert(hasNode(id));
+    return *(*nodes.find(id)).second;
+  };
+  virtual ClusterNode& getNode(ID id)
+  {
+    assert(hasNode(id));
+    return *nodes[id];
+  };
   virtual ClusterNodeCreationPair getOrCreateNode(ID id)
   {
-    return { node, false };
+    if(!hasNode(id)) {
+      nodes[id] = std::make_unique<ClusterNode>(
+        changed, 0, id, statelessMessageTransmitter, *this);
+      return { *nodes[id], true };
+    }
+    return { *nodes[id], false };
   };
-  virtual bool hasNode(ID id) { return true; };
+  virtual bool hasNode(ID id) const { return nodes.count(id); };
+  virtual void removeNode(ID id, const std::string& reason){};
+
+  virtual void transmitJobDescription(JobDescription&& jd,
+                                      NetworkedNode& nn,
+                                      SuccessCB sendFinishedCB)
+  {}
 
   private:
   bool changed = false;
-  ClusterNode node;
+  std::map<ID, std::unique_ptr<ClusterNode>> nodes;
+  paracooba::messages::MessageTransmitter& statelessMessageTransmitter;
 };
 
 TEST_CASE("Initiate a paracooba::net::Connection")
@@ -76,11 +97,16 @@ TEST_CASE("Initiate a paracooba::net::Connection")
   boost::asio::io_service ioService;
   ConfigPtr config1 = std::make_shared<Config>();
   config1->parseParameters();
+  config1->set(Config::LocalName, "1");
   ConfigPtr config2 = std::make_shared<Config>();
   config2->parseParameters();
+  config2->set(Config::LocalName, "2");
 
   config1->set(Config::Id, static_cast<int64_t>(1));
   config2->set(Config::Id, static_cast<int64_t>(2));
+
+  config1->setNetworkDebugMode(true);
+  config2->setNetworkDebugMode(true);
 
   LogPtr log1 = std::make_shared<Log>(config1);
   LogPtr log2 = std::make_shared<Log>(config2);
@@ -96,34 +122,34 @@ TEST_CASE("Initiate a paracooba::net::Connection")
   int dummy;
   messages::MessageTransmitter* dummyStatelessMessageTransmitter =
     reinterpret_cast<messages::MessageTransmitter*>(&dummy);
-  ClNodeStore clusterNodeStore(*dummyStatelessMessageTransmitter);
+  ClNodeStore clusterNodeStore1(*dummyStatelessMessageTransmitter);
+  ClNodeStore clusterNodeStore2(*dummyStatelessMessageTransmitter);
 
   Connection conn1(ioService,
                    log1,
                    config1,
-                   clusterNodeStore,
+                   clusterNodeStore1,
                    msgReceiver1,
                    jdReceiverProvider1);
   Connection conn2(ioService,
                    log2,
                    config2,
-                   clusterNodeStore,
+                   clusterNodeStore2,
                    msgReceiver2,
                    jdReceiverProvider2);
-
-  NetworkedNode nn(10, *dummyStatelessMessageTransmitter);
 
   auto localEndpoint = boost::asio::ip::tcp::endpoint(
     boost::asio::ip::address_v4::loopback(), 17171);
 
-  nn.setRemoteTcpEndpoint(localEndpoint);
+  ClusterNode& node1 = clusterNodeStore2.getOrCreateNode(1).first;
+  node1.getNetworkedNode()->setRemoteTcpEndpoint(localEndpoint);
 
   boost::asio::ip::tcp::acceptor acceptor(ioService, localEndpoint);
   acceptor.async_accept(
     conn1.socket(),
     boost::bind(
       &Connection::readHandler, conn1, boost::asio::placeholders::error, 0));
-  conn2.connect(nn);
+  conn2.connect(*node1.getNetworkedNode());
 
   ioService.run_for(std::chrono::milliseconds(1));
 
@@ -167,4 +193,9 @@ TEST_CASE("Initiate a paracooba::net::Connection")
   ioService.run_for(std::chrono::milliseconds(2));
 
   REQUIRE(msgReceiver1.messages.size() == 6);
+
+  // End the connection cleanly, so no restarts are carried out.
+  conn1.sendEndToken();
+
+  ioService.run_for(std::chrono::milliseconds(2));
 }

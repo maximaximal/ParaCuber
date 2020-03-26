@@ -27,39 +27,46 @@ class UDPServer
   {
     State(boost::asio::io_service& ioService,
           boost::asio::ip::udp::endpoint endpoint,
+          boost::asio::ip::udp::endpoint broadcastEndpoint,
           ConfigPtr config,
           LogPtr log,
-          messages::MessageReceiver& messageReceiver,
-          ClusterNodeStore& clusterNodeStore,
-          ClusterNode& thisNode);
+          messages::MessageReceiver& messageReceiver);
     ~State();
 
     boost::asio::ip::udp::socket socket;
+    boost::asio::ip::udp::endpoint broadcastEndpoint;
     boost::asio::ip::udp::endpoint remoteEndpoint;
     boost::asio::streambuf recvStreambuf;
     boost::asio::streambuf sendStreambuf;
     ConfigPtr config;
     Logger logger;
     messages::MessageReceiver& messageReceiver;
-    ClusterNodeStore& clusterNodeStore;
-    ClusterNode& thisNode;
+    ClusterNodeStore* clusterNodeStore = nullptr;
+    ClusterNode* thisNode = nullptr;
     std::mutex sendMutex;
   };
 
   UDPServer(boost::asio::io_service& ioService,
             boost::asio::ip::udp::endpoint endpoint,
+            boost::asio::ip::udp::endpoint broadcastEndpoint,
             ConfigPtr config,
             LogPtr log,
-            messages::MessageReceiver& messageReceiver,
-            ClusterNodeStore& clusterNodeStore,
-            ClusterNode& thisNode);
+            messages::MessageReceiver& messageReceiver);
   virtual ~UDPServer();
 
-  void startAccepting();
+  void startAccepting(ClusterNodeStore& clusterNodeStore,
+                      ClusterNode& thisNode);
 
   virtual void transmitMessage(const messages::Message& msg,
                                NetworkedNode& nn,
-                               std::function<void(bool)> sendFinishedCB);
+                               SuccessCB sendFinishedCB = EmptySuccessCB);
+
+  void broadcastMessage(const messages::Message& msg,
+                        SuccessCB successCB = EmptySuccessCB);
+
+  void transmitMessageToEndpoint(const messages::Message& msg,
+                                 boost::asio::ip::udp::endpoint target,
+                                 SuccessCB sendFinishedCB = EmptySuccessCB);
 
   /** @brief Read handler that is called when data is received. */
   void operator()(const boost::system::error_code& ec, size_t bytes_received);
@@ -67,10 +74,16 @@ class UDPServer
   private:
   std::shared_ptr<State> m_state;
 
+  void accept();
+
   boost::asio::ip::udp::socket& socket() { return m_state->socket; }
   boost::asio::ip::udp::endpoint& remoteEndpoint()
   {
     return m_state->remoteEndpoint;
+  }
+  boost::asio::ip::udp::endpoint& broadcastEndpoint()
+  {
+    return m_state->broadcastEndpoint;
   }
   boost::asio::streambuf& recvStreambuf() { return m_state->recvStreambuf; }
   boost::asio::streambuf& sendStreambuf() { return m_state->sendStreambuf; }
@@ -79,7 +92,11 @@ class UDPServer
   {
     return m_state->messageReceiver;
   }
-  ClusterNodeStore& clusterNodeStore() { return m_state->clusterNodeStore; }
+  ClusterNodeStore& clusterNodeStore()
+  {
+    assert(m_state->clusterNodeStore);
+    return *m_state->clusterNodeStore;
+  }
   std::mutex& sendMutex() { return m_state->sendMutex; }
 };
 }

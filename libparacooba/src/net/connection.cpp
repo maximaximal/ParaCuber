@@ -23,41 +23,54 @@ namespace net {
 
 #define REC_BUF_SIZE static_cast<uint64_t>(4096)
 
+static const std::string& ConnectionLoggerName = "Connection";
+
 Connection::State::State(boost::asio::io_service& ioService,
                          LogPtr log,
                          ConfigPtr config,
                          ClusterNodeStore& clusterNodeStore,
                          messages::MessageReceiver& msgRec,
-                         messages::JobDescriptionReceiverProvider& jdRecProv)
+                         messages::JobDescriptionReceiverProvider& jdRecProv,
+                         uint16_t retries)
   : ioService(ioService)
   , socket(ioService)
   , log(log)
-  , logger(log->createLogger("Connection"))
+  , logger(log->createLogger(ConnectionLoggerName))
   , config(config)
   , clusterNodeStore(clusterNodeStore)
   , messageReceiver(msgRec)
   , jobDescriptionReceiverProvider(jdRecProv)
+  , connectionTry(retries)
 {
   thisId = config->getInt64(Config::Id);
 }
 
 Connection::State::~State()
 {
-  PARACOOBA_LOG(logger, Trace)
+  PARACOOBA_LOG(logger, NetTrace)
     << "Connection Ended with resume mode " << resumeMode;
-  remoteNN->removeActiveTCPClient();
+  if(remoteNN) {
+    remoteNN->removeActiveTCPClient();
+  }
 
   switch(resumeMode) {
-    case RestartAfterShutdown:
+    case RestartAfterShutdown: {
       // Attempt restart.
-      Connection conn(ioService,
-                      log,
-                      config,
-                      clusterNodeStore,
-                      msgReceiver,
-                      jdReceiverProvider);
-      conn.connect(*remoteNN);
+      if(remoteNN) {
+        Connection conn(ioService,
+                        log,
+                        config,
+                        clusterNodeStore,
+                        messageReceiver,
+                        jobDescriptionReceiverProvider,
+                        connectionTry);
+        conn.connect(*remoteNN);
+      } else {
+        PARACOOBA_LOG(logger, NetTrace)
+          << "Cannot restart connection, as no remoteNN is set!";
+      }
       break;
+    }
     case EndAfterShutdown:
       break;
   }
@@ -76,6 +89,9 @@ Connection::SendQueueEntry::SendQueueEntry(const messages::Message& msg)
 Connection::SendQueueEntry::SendQueueEntry(const messages::JobDescription& jd)
   : sendItem(std::make_unique<SendItem>(jd))
 {}
+Connection::SendQueueEntry::SendQueueEntry(EndTokenTag endTokenTag)
+  : sendItem(std::make_unique<SendItem>(endTokenTag))
+{}
 Connection::SendQueueEntry::~SendQueueEntry() {}
 
 Connection::Connection(boost::asio::io_service& ioService,
@@ -83,15 +99,30 @@ Connection::Connection(boost::asio::io_service& ioService,
                        ConfigPtr config,
                        ClusterNodeStore& clusterNodeStore,
                        messages::MessageReceiver& msgRec,
-                       messages::JobDescriptionReceiverProvider& jdRecProv)
+                       messages::JobDescriptionReceiverProvider& jdRecProv,
+                       uint16_t retries)
   : m_state(std::make_shared<State>(ioService,
                                     log,
                                     config,
                                     clusterNodeStore,
                                     msgRec,
-                                    jdRecProv))
+                                    jdRecProv,
+                                    retries))
 {}
-Connection::~Connection() {}
+Connection::Connection(const Connection& conn)
+  : m_state(conn.m_state)
+{}
+
+Connection::~Connection()
+{
+  if(sendMode() != TransmitEndToken && m_state.use_count() == 1) {
+    // This is the last connection, so this is also the last one having a
+    // reference to the state. This is a clean shutdown of a connection, the
+    // socket will be ended. To differentiate between this clean shutdown and a
+    // dirty one, an EndToken must be transmitted. This is the last action.
+    Connection(*this).sendEndToken();
+  }
+}
 
 void
 Connection::sendCNF(std::shared_ptr<CNF> cnf)
@@ -107,6 +138,11 @@ void
 Connection::sendJobDescription(const messages::JobDescription& jd)
 {
   sendSendQueueEntry(SendQueueEntry(jd));
+}
+void
+Connection::sendEndToken()
+{
+  sendSendQueueEntry(SendQueueEntry(EndTokenTag()));
 }
 void
 Connection::sendSendQueueEntry(SendQueueEntry&& e)
@@ -135,7 +171,7 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
 
   enrichLogger();
 
-  if(remoteNN()->deletionRequested()) {
+  if(remoteNN() && remoteNN()->deletionRequested()) {
     return;
   }
 
@@ -153,6 +189,9 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
       if(!initRemoteNN()) {
         // Exit coroutine and connection. This connection is already established
         // and is full duplex, the other direction is not required!
+        PARACOOBA_LOG(logger(), NetTrace)
+          << "Connection is already established from other side, connection "
+             "will be dropped.";
         yield break;
       }
       connectionEstablished() = true;
@@ -165,7 +204,11 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
       for(;;) {
         yield async_read(socket(), BUF(currentModeAsUint8), rh);
 
-        if(currentMode() == TransmitCNF) {
+        if(currentMode() == TransmitEndToken) {
+          // A successfully terminated connection does not need to be restarted
+          // immediately.
+          resumeMode() = EndAfterShutdown;
+        } else if(currentMode() == TransmitCNF) {
           if(!getLocalCNF())
             return;
           yield async_read(socket(), BUF(size), rh);
@@ -178,6 +221,7 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
 
             receiveIntoCNF(bytes_received);
           } while(size() > 0);
+          context()->start(Daemon::Context::State::FormulaReceived);
         } else if(currentMode() == TransmitJobDescription ||
                   currentMode() == TransmitControlMessage) {
           yield async_read(socket(), BUF(size), rh);
@@ -236,7 +280,12 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
 
         yield async_write(socket(), BUF(sendModeAsUint8), wh);
 
-        if((cnf = std::get_if<std::shared_ptr<CNF>>(currentSendItem().get()))) {
+        if(std::holds_alternative<EndTokenTag>(*currentSendItem())) {
+          // Nothing else needs to be done, the end token has no other payload.
+          // It is sent when the connection terminates normally, but it is no
+          // offline announcement.
+        } else if((cnf = std::get_if<std::shared_ptr<CNF>>(
+                     currentSendItem().get()))) {
           sendSize() = (*cnf)->getSizeToBeSent();
           yield async_write(socket(), BUF(sendSize), wh);
 
@@ -265,8 +314,7 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
           yield async_write(socket(), BUF(sendSize), wh);
 
           PARACOOBA_LOG(logger(), NetTrace)
-            << "Transmit with mode " << sendMode() << " and size "
-            << sendSize();
+            << "Transmitting size " << sendSize();
 
           yield async_write(socket(), sendStreambuf(), wh);
         }
@@ -295,11 +343,12 @@ Connection::connect(NetworkedNode& nn)
 
   uint16_t allowedRetries = config()->getUint16(Config::ConnectionRetries);
 
+  ++connectionTry();
+
   if(getConnectionTries() < allowedRetries) {
     PARACOOBA_LOG(logger(), NetTrace)
       << "Trying to connect to " << nn.getRemoteTcpEndpoint()
-      << "(ID: " << nn.getId() << "), Try " << getConnectionTries();
-    ++connectionTry();
+      << " (ID: " << nn.getId() << "), Try " << getConnectionTries();
     socket().async_connect(
       nn.getRemoteTcpEndpoint(),
       boost::bind(
@@ -307,6 +356,7 @@ Connection::connect(NetworkedNode& nn)
   } else {
     PARACOOBA_LOG(logger(), NetTrace)
       << "Retries exhausted, no reconnect will be tried.";
+    resumeMode() = EndAfterShutdown;
   }
 }
 
@@ -320,6 +370,8 @@ Connection::getSendModeFromSendItem(const Connection::SendItem& sendItem)
       return Mode::TransmitControlMessage;
     case 2:
       return Mode::TransmitJobDescription;
+    case 3:
+      return Mode::TransmitEndToken;
   }
   return Mode::TransmitModeUnknown;
 }
@@ -376,6 +428,23 @@ Connection::receiveSerializedMessage(size_t bytes_received)
           jd.getOriginatorID());
       if(receiver) {
         receiver->receiveJobDescription(remoteId(), std::move(jd), *remoteNN());
+
+        if(context()) {
+          // This is a connection between a Master and a Daemon. So the context
+          // for this formula can be notified of this JD.
+          switch(jd.getKind()) {
+            case messages::JobDescription::Initiator:
+              context()->start(Daemon::Context::State::AllowanceMapReceived);
+              break;
+            default:
+              if(!context()->getReadyForWork()) {
+                PARACOOBA_LOG(logger(), GlobalError)
+                  << "Receive JobDescription while context is not ready for "
+                     "work!";
+              }
+              break;
+          }
+        }
       } else {
         PARACOOBA_LOG(logger(), GlobalError)
           << "Received a JobDescription from " << remoteId()
@@ -402,13 +471,13 @@ Connection::enrichLogger()
     std::stringstream context;
     context << "{";
 
-    context << "R:'" << remoteId() << ",";
+    context << "R:'" << remoteId() << "',";
     context << "TX:'" << sendMode() << "',";
     context << "RX:'" << currentMode() << "'";
 
     context << "}";
 
-    logger() = m_state->log->createLogger("Connection", context.str());
+    logger() = m_state->log->createLogger(ConnectionLoggerName, context.str());
   }
 }
 
@@ -427,11 +496,18 @@ Connection::popNextSendItem()
 bool
 Connection::initRemoteNN()
 {
+  if(remoteNN()) {
+    // If the remote was already set from outside, this can return immediately.
+    // No new node needs to be created.
+    remoteNN()->assignConnection(*this);
+    return true;
+  }
+
   auto [node, inserted] = clusterNodeStore().getOrCreateNode(remoteId());
-  NetworkedNode* nn = node.getNetworkedNode();
+  remoteNN() = node.getNetworkedNode();
 
   enrichLogger();
-  if(nn->assignConnection(*this)) {
+  if(remoteNN()->assignConnection(*this)) {
     PARACOOBA_LOG(logger(), NetTrace)
       << "Initiated Remote NN, connection established.";
     return true;

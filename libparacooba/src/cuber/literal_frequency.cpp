@@ -33,7 +33,7 @@ class ClauseIterator : public CaDiCaL::ClauseIterator
 LiteralFrequency::LiteralFrequency(ConfigPtr config,
                                    LogPtr log,
                                    CNF& rootCNF,
-                                   Cuber::LiteralMap* allowanceMap)
+                                   LiteralMap* allowanceMap)
   : Cuber(config, log, rootCNF)
   , m_literalFrequency(allowanceMap)
 {}
@@ -75,7 +75,7 @@ LiteralFrequency::init()
 }
 
 bool
-LiteralFrequency::shouldGenerateTreeSplit(CNFTree::Path path)
+LiteralFrequency::shouldGenerateTreeSplit(Path path)
 {
   assert(m_literalFrequency);
   assert(m_literalFrequency->size() > 0);
@@ -105,7 +105,7 @@ LiteralFrequency::shouldGenerateTreeSplit(CNFTree::Path path)
 }
 
 bool
-LiteralFrequency::getCube(CNFTree::Path path, std::vector<int>& literals)
+LiteralFrequency::getCube(Path path, Cube& literals)
 {
   assert(m_literalFrequency);
   assert(m_literalFrequency->size() > 0);
@@ -114,7 +114,7 @@ LiteralFrequency::getCube(CNFTree::Path path, std::vector<int>& literals)
   literals.reserve(CNFTree::getDepth(path));
 
   for(size_t depth = 1; depth <= CNFTree::getDepth(path); ++depth) {
-    CNFTree::Path currPath = CNFTree::setDepth(path, depth);
+    Path currPath = CNFTree::setDepth(path, depth);
 
     auto additionComponent = getAdditionComponent(currPath);
     auto moduloComponent = getModuloComponent(currPath);

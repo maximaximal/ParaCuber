@@ -15,13 +15,9 @@
 #include <string>
 
 namespace paracooba {
-ClusterStatistics::ClusterStatistics(
-  ConfigPtr config,
-  LogPtr log,
-  messages::MessageTransmitter& statelessMessageTransmitter)
+ClusterStatistics::ClusterStatistics(ConfigPtr config, LogPtr log)
   : m_config(config)
   , m_logger(log->createLogger("ClusterStatistics"))
-  , m_statelessMessageTransmitter(statelessMessageTransmitter)
 {}
 
 ClusterStatistics::~ClusterStatistics() {}
@@ -29,10 +25,13 @@ ClusterStatistics::~ClusterStatistics() {}
 void
 ClusterStatistics::initLocalNode()
 {
+  assert(m_statelessMessageTransmitter);
+
   ClusterNode thisNode(m_changed,
                        m_config->getInt64(Config::Id),
                        m_config->getInt64(Config::Id),
-                       m_statelessMessageTransmitter);
+                       *m_statelessMessageTransmitter,
+                       *this);
   thisNode.setDaemon(m_config->isDaemonMode());
   thisNode.setDistance(1);
   thisNode.setFullyKnown(true);
@@ -75,15 +74,19 @@ ClusterStatistics::getNode(ID id)
 ClusterNodeStore::ClusterNodeCreationPair
 ClusterStatistics::getOrCreateNode(ID id)
 {
-  auto [it, inserted] = m_nodeMap.emplace(std::pair{
-    id,
-    ClusterNode(
-      m_changed, m_thisNode->getId(), id, m_statelessMessageTransmitter) });
+  assert(m_statelessMessageTransmitter);
+  auto [it, inserted] =
+    m_nodeMap.emplace(std::pair{ id,
+                                 ClusterNode(m_changed,
+                                             m_thisNode->getId(),
+                                             id,
+                                             *m_statelessMessageTransmitter,
+                                             *this) });
   return { it->second, inserted };
 }
 
 bool
-ClusterStatistics::hasNode(ID id)
+ClusterStatistics::hasNode(ID id) const
 {
   auto [map, lock] = getNodeMap();
   return map.count(id) > 0;
@@ -197,7 +200,7 @@ ClusterStatistics::handlePathOnNode(int64_t originator,
                                     const TaskSkeleton& skel)
 {
   Communicator* comm = m_config->getCommunicator();
-  CNFTree::Path p = skel.p;
+  Path p = skel.p;
 
   // Local node should be handled externally, without using this function.
   assert(&node != m_thisNode);

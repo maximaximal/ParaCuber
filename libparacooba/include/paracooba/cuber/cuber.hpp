@@ -21,18 +21,16 @@ class Cuber
   explicit Cuber(ConfigPtr config, LogPtr log, CNF& rootCNF);
   virtual ~Cuber();
 
-  using LiteralMap = std::vector<CNFTree::CubeVar>;
-
   struct LiteralOccurence
   {
-    LiteralOccurence(int literal = 0)
+    LiteralOccurence(Literal literal = 0)
       : literal(literal)
     {}
 
-    int literal;
+    Literal literal;
     size_t count = 0;
 
-    void operator=(int lit) { this->literal = lit; }
+    void operator=(Literal lit) { this->literal = lit; }
 
     bool operator<(const LiteralOccurence& o) { return count < o.count; }
     bool operator>(const LiteralOccurence& o) { return count > o.count; }
@@ -41,17 +39,17 @@ class Cuber
 
   /** @brief Checks if a tree split should be generated.
    */
-  virtual bool shouldGenerateTreeSplit(CNFTree::Path path) = 0;
+  virtual bool shouldGenerateTreeSplit(Path path) = 0;
   /** @brief Returns the full cube for a path. Return false means the cube does
    * not need to be solved and is UNSAT.
    */
-  virtual bool getCube(CNFTree::Path path, std::vector<int>& literals) = 0;
+  virtual bool getCube(Path path, std::vector<int>& literals) = 0;
 
-  static inline uint64_t getModuloComponent(CNFTree::Path p)
+  static inline uint64_t getModuloComponent(Path p)
   {
     return (1 << (CNFTree::getDepth(p)));
   }
-  static inline uint64_t getAdditionComponent(CNFTree::Path p)
+  static inline uint64_t getAdditionComponent(Path p)
   {
     return CNFTree::getDepthShiftedPath(p);
   }

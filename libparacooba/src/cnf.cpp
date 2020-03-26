@@ -35,12 +35,14 @@ namespace paracooba {
 CNF::CNF(ConfigPtr config,
          LogPtr log,
          int64_t originId,
+         ClusterNodeStore& clusterNodeStore,
          std::string_view dimacsFile)
   : m_config(config)
   , m_originId(originId)
   , m_dimacsFile(dimacsFile)
   , m_log(log)
   , m_logger(log->createLogger("CNF"))
+  , m_clusterNodeStore(clusterNodeStore)
   , m_cnfTree(std::make_unique<CNFTree>(log, *this, config, originId))
 {
   if(dimacsFile != "") {
@@ -58,7 +60,6 @@ CNF::CNF(ConfigPtr config,
   }
 
   connectToCNFTreeSignal();
-  m_jobDescriptionTransmitter = config->getCommunicator();
 }
 CNF::CNF(const CNF& o)
   : m_config(o.m_config)
@@ -66,8 +67,8 @@ CNF::CNF(const CNF& o)
   , m_dimacsFile(o.m_dimacsFile)
   , m_log(o.m_log)
   , m_logger(o.m_log->createLogger("CNF"))
+  , m_clusterNodeStore(o.m_clusterNodeStore)
   , m_cnfTree(std::make_unique<CNFTree>(m_log, *this, o.m_config, o.m_originId))
-  , m_jobDescriptionTransmitter(o.m_jobDescriptionTransmitter)
 {
   connectToCNFTreeSignal();
 }
@@ -149,7 +150,7 @@ CNF::sendAllowanceMap(int64_t id, SendFinishedCB finishedCallback)
           }
         }
 
-        m_jobDescriptionTransmitter->transmitJobDescription(
+        m_clusterNodeStore.transmitJobDescription(
           std::move(jd), id, [this, id, finishedCallback](bool success) {
             if(success) {
               finishedCallback();
@@ -165,7 +166,7 @@ CNF::sendAllowanceMap(int64_t id, SendFinishedCB finishedCallback)
 void
 CNF::sendPath(int64_t id, const TaskSkeleton& skel, SendFinishedCB finishedCB)
 {
-  CNFTree::Path p = skel.p;
+  Path p = skel.p;
   assert(CNFTree::getDepth(p) > 0);
   assert(rootTaskReady.isReady());
 
@@ -174,7 +175,7 @@ CNF::sendPath(int64_t id, const TaskSkeleton& skel, SendFinishedCB finishedCB)
   messages::JobPath jp(p, skel.optionalCube);
   messages::JobDescription jd(m_originId);
   jd.insert(jp);
-  m_jobDescriptionTransmitter->transmitJobDescription(
+  m_clusterNodeStore.transmitJobDescription(
     std::move(jd), id, [this, p, id, finishedCB](bool success) {
       if(success) {
         finishedCB();
@@ -189,7 +190,7 @@ CNF::sendPath(int64_t id, const TaskSkeleton& skel, SendFinishedCB finishedCB)
 }
 
 void
-CNF::sendResult(int64_t id, CNFTree::Path p, SendFinishedCB finishedCallback)
+CNF::sendResult(int64_t id, Path p, SendFinishedCB finishedCallback)
 {
   assert(rootTaskReady.isReady());
 
@@ -229,7 +230,7 @@ CNF::sendResult(int64_t id, CNFTree::Path p, SendFinishedCB finishedCallback)
   auto jd = messages::JobDescription(m_originId);
   jd.insert(jobResult);
 
-  m_jobDescriptionTransmitter->transmitJobDescription(
+  m_clusterNodeStore.transmitJobDescription(
     std::move(jd), id, [this, finishedCallback, p, id](bool success) {
       if(success) {
         // A result has been sent
@@ -374,7 +375,7 @@ void
 CNF::connectToCNFTreeSignal()
 {
   m_cnfTree->getRootStateChangedSignal().connect(
-    [this](CNFTree::Path p, CNFTree::State state) {
+    [this](Path p, CNFTree::State state) {
       if(state != CNFTree::SAT && state != CNFTree::UNSAT)
         return;
 
@@ -419,7 +420,7 @@ CNF::readyToBeStarted() const
 }
 
 void
-CNF::solverFinishedSlot(const TaskResult& result, CNFTree::Path p)
+CNF::solverFinishedSlot(const TaskResult& result, Path p)
 {
   Result res;
   res.p = p;
@@ -617,7 +618,7 @@ CNF::handleFinishedResultReceived(const Result& result, int64_t sentFromId)
 }
 
 void
-CNF::insertResult(CNFTree::Path p, CNFTree::State state, CNFTree::Path source)
+CNF::insertResult(Path p, CNFTree::State state, Path source)
 {
   p = CNFTree::cleanupPath(p);
 

@@ -13,6 +13,7 @@
 #include <set>
 
 #include "log.hpp"
+#include "types.hpp"
 
 namespace paracooba {
 class Config;
@@ -29,9 +30,6 @@ class CNFTree
                    int64_t originCNFId);
   ~CNFTree();
 
-  using Path = uint64_t;
-  using CubeVar = int32_t;
-
   static const Path DefaultUninitiatedPath = std::numeric_limits<Path>::max();
 
   enum State
@@ -47,8 +45,6 @@ class CNFTree
     UnknownPath,
     _STATE_COUNT
   };
-
-  using LiteralVector = std::vector<CubeVar>;
 
   /** @brief A single node on the virtual cubing binary tree.
    */
@@ -299,7 +295,7 @@ std::ostream&
 operator<<(std::ostream& o, CNFTree::State s);
 
 template<>
-inline CNFTree::Path
+inline Path
 CNFTree::buildPath(uint64_t p, uint8_t d)
 {
   return setDepth(p, d);

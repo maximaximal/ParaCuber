@@ -37,7 +37,7 @@ class API
   ~API();
 
   void injectCNFTreeNode(int64_t handle,
-                         CNFTree::Path p,
+                         Path p,
                          CNFTree::State state,
                          int64_t remote);
 
@@ -84,7 +84,7 @@ class API
   WSMap m_wsData;
 
   bool handleInjectedCNFTreeNode(WSData& d,
-                                 CNFTree::Path p,
+                                 Path p,
                                  CNFTree::State state,
                                  int64_t remote);
 

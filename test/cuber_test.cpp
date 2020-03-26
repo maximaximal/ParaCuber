@@ -17,7 +17,7 @@ TEST_CASE("Cuber initialise and transform LiteralOccurenceMap to LiteralMap")
   occMap[1].count = 2;
   occMap[4].count = 3;
 
-  Cuber::LiteralMap litMap;
+  LiteralMap litMap;
   Cuber::literalOccurenceMapToLiteralMap(litMap, std::move(occMap));
   REQUIRE(litMap[0] == 5);
   REQUIRE(litMap[1] == 2);

@@ -3,6 +3,7 @@
 #include "../include/paracooba/networked_node.hpp"
 #include "../include/paracooba/task_factory.hpp"
 
+#include "../include/paracooba/messages/announcement_request.hpp"
 #include "../include/paracooba/messages/node.hpp"
 #include "../include/paracooba/messages/node_status.hpp"
 #include "../include/paracooba/messages/online_announcement.hpp"
@@ -108,6 +109,7 @@ ClusterNode::applyMessageNode(const messages::Node& node)
   if(!wasFullyKnown) {
     // ClusterNode is now fully known! This means, a net::Connection will be
     // established as soon as possible.
+    m_clusterNodeStore.nodeFullyKnown(*this);
   }
 }
 void
@@ -115,10 +117,21 @@ ClusterNode::applyOnlineAnnouncementMessage(
   const messages::OnlineAnnouncement& onlineAnnouncement)
 {
   applyMessageNode(onlineAnnouncement.getNode());
+
+  PARACOOBA_CLUSTERNODE_CHANGED(m_initializedByPeer, false)
+}
+void
+ClusterNode::applyAnnouncementRequestMessage(
+  const messages::AnnouncementRequest& announcementRequest)
+{
+  applyMessageNode(announcementRequest.getRequester());
+
+  PARACOOBA_CLUSTERNODE_CHANGED(m_initializedByPeer, true)
 }
 void
 ClusterNode::applyNodeStatusMessage(const messages::NodeStatus& nodeStatus)
 {
+  statusReceived();
   setWorkQueueSize(nodeStatus.getWorkQueueSize());
 
   if(nodeStatus.isDaemon()) {

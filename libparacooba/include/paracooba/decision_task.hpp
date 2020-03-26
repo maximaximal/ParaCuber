@@ -19,18 +19,18 @@ class DecisionTask : public Task
 {
   public:
   DecisionTask(std::shared_ptr<CNF> rootCNF,
-               CNFTree::Path p,
+               Path p,
                const OptionalCube& optionalCube);
   virtual ~DecisionTask();
 
   virtual TaskResultPtr execute();
 
-  CNFTree::Path getPath() const { return m_path; }
+  Path getPath() const { return m_path; }
   const OptionalCube& getOptionalCube() const { return m_optionalCube; }
 
   private:
   std::shared_ptr<CNF> m_rootCNF;
-  CNFTree::Path m_path;
+  Path m_path;
   OptionalCube m_optionalCube;
 };
 }

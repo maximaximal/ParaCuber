@@ -33,6 +33,7 @@ Config::Config()
   {
     m_generatedLocalName =
       boost::asio::ip::host_name() + ".local;" + std::to_string(getpid());
+    set(LocalName, m_generatedLocalName);
   }
 
   /* CONFIG FILES ONLY OPTIONS
@@ -126,6 +127,12 @@ Config::generateId(int64_t uniqueNumber)
 {
   int16_t pid = static_cast<int16_t>(::getpid());
   return ((int64_t)pid << 48) | uniqueNumber;
+}
+
+ID
+Config::getId() const
+{
+  return getInt64(Config::Id);
 }
 
 bool

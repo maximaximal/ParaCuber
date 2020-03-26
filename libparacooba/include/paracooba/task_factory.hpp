@@ -39,7 +39,7 @@ class TaskFactory
     Solve
   };
 
-  static inline int getTaskPriority(Mode mode, CNFTree::Path p)
+  static inline int getTaskPriority(Mode mode, Path p)
   {
     return (CNFTree::maxPathDepth - CNFTree::getDepth(p)) +
            (mode != Solve ? 100 : 0);
@@ -52,7 +52,7 @@ class TaskFactory
     int priority;
   };
 
-  void addPath(CNFTree::Path p,
+  void addPath(Path p,
                Mode m,
                int64_t originator,
                OptionalCube optionalCube = std::nullopt);
@@ -64,10 +64,10 @@ class TaskFactory
   TaskSkeleton produceTaskSkeletonBackwards();
 
   void addExternallyProcessingTask(int64_t originator,
-                                   CNFTree::Path p,
+                                   Path p,
                                    ClusterNode& node);
 
-  void removeExternallyProcessedTask(CNFTree::Path p,
+  void removeExternallyProcessedTask(Path p,
                                      int64_t id,
                                      bool reset = false);
   void readdExternalTasks(int64_t id);
@@ -101,7 +101,7 @@ class TaskFactory
 
     size_t readdTasks(TaskFactory* factory);
     void addTask(TaskSkeleton&& skel) { tasks.insert(std::move(skel)); }
-    TaskSkeleton removeTask(CNFTree::Path p);
+    TaskSkeleton removeTask(Path p);
   };
   using ExternalTasksSetMap = std::map<int64_t, ExternalTasksSet>;
 
@@ -120,12 +120,12 @@ class TaskSkeleton
   public:
   TaskFactory::Mode mode;
   int64_t originator;
-  CNFTree::Path p;
+  Path p;
   OptionalCube optionalCube;
 
   TaskSkeleton(TaskFactory::Mode mode,
                int64_t originator,
-               CNFTree::Path p,
+               Path p,
                OptionalCube optionalCube = std::nullopt)
     : mode(mode)
     , originator(originator)

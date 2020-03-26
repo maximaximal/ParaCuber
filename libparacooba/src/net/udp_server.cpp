@@ -13,17 +13,15 @@ namespace net {
 
 UDPServer::State::State(boost::asio::io_service& ioService,
                         boost::asio::ip::udp::endpoint endpoint,
+                        boost::asio::ip::udp::endpoint broadcastEndpoint,
                         ConfigPtr config,
                         LogPtr log,
-                        messages::MessageReceiver& messageReceiver,
-                        ClusterNodeStore& clusterNodeStore,
-                        ClusterNode& thisNode)
+                        messages::MessageReceiver& messageReceiver)
   : socket(ioService, endpoint)
   , config(config)
+  , broadcastEndpoint(broadcastEndpoint)
   , logger(log->createLogger("UDPServer"))
   , messageReceiver(messageReceiver)
-  , clusterNodeStore(clusterNodeStore)
-  , thisNode(thisNode)
 {}
 
 UDPServer::State::~State()
@@ -35,33 +33,39 @@ UDPServer::State::~State()
 
 UDPServer::UDPServer(boost::asio::io_service& ioService,
                      boost::asio::ip::udp::endpoint endpoint,
+                     boost::asio::ip::udp::endpoint broadcastEndpoint,
                      ConfigPtr config,
                      LogPtr log,
-                     messages::MessageReceiver& messageReceiver,
-                     ClusterNodeStore& clusterNodeStore,
-                     ClusterNode& thisNode)
+                     messages::MessageReceiver& messageReceiver)
   : m_state(std::make_shared<State>(ioService,
                                     endpoint,
+                                    broadcastEndpoint,
                                     config,
                                     log,
-                                    messageReceiver,
-                                    clusterNodeStore,
-                                    thisNode))
+                                    messageReceiver))
+{}
+UDPServer::~UDPServer() {}
+
+void
+UDPServer::startAccepting(ClusterNodeStore& clusterNodeStore,
+                          ClusterNode& thisNode)
 {
+  m_state->clusterNodeStore = &clusterNodeStore;
+  m_state->thisNode = &thisNode;
+
+  auto endpoint = socket().local_endpoint();
   NetworkedNode* nn = thisNode.getNetworkedNode();
   assert(nn);
   nn->setRemoteUdpEndpoint(endpoint);
   socket().open(endpoint.protocol());
   socket().set_option(boost::asio::socket_base::broadcast(true));
   socket().bind(endpoint);
-  startAccepting();
-  PARACOOBA_LOG(logger(), Debug)
-    << "UDPServer started at " << socket().local_endpoint();
+  accept();
+  PARACOOBA_LOG(logger(), Debug) << "UDPServer started at " << endpoint;
 }
-UDPServer::~UDPServer() {}
 
 void
-UDPServer::startAccepting()
+UDPServer::accept()
 {
   recvStreambuf().consume(recvStreambuf().size() + 1);
   (*this)(boost::system::error_code(), 0);
@@ -73,7 +77,6 @@ void
 UDPServer::operator()(const boost::system::error_code& ec,
                       size_t bytes_received)
 {
-
   if(!ec || ec == boost::asio::error::message_size) {
     reenter(this)
     {
@@ -101,12 +104,12 @@ UDPServer::operator()(const boost::system::error_code& ec,
           << e.what();
       }
 
-      yield startAccepting();
+      yield accept();
     }
   } else {
     PARACOOBA_LOG(logger(), LocalError)
       << "Error receiving data from UDP socket. Error: " << ec.message();
-    startAccepting();
+    accept();
   }
 }
 
@@ -115,11 +118,24 @@ UDPServer::operator()(const boost::system::error_code& ec,
 void
 UDPServer::transmitMessage(const messages::Message& msg,
                            NetworkedNode& nn,
-                           std::function<void(bool)> sendFinishedCB)
+                           SuccessCB successCB)
 {
   assert(nn.isUdpEndpointSet());
   assert(nn.isUdpPortSet());
+  transmitMessageToEndpoint(msg, nn.getRemoteUdpEndpoint(), successCB);
+}
 
+void
+UDPServer::broadcastMessage(const messages::Message& msg, SuccessCB successCB)
+{
+  transmitMessageToEndpoint(msg, broadcastEndpoint(), successCB);
+}
+
+void
+UDPServer::transmitMessageToEndpoint(const messages::Message& msg,
+                                     boost::asio::ip::udp::endpoint target,
+                                     SuccessCB sendFinishedCB)
+{
   std::lock_guard lock(sendMutex());
   std::ostream sendOstream(&sendStreambuf());
   cereal::BinaryOutputArchive oarchive(sendOstream);
@@ -130,11 +146,11 @@ UDPServer::transmitMessage(const messages::Message& msg,
   bool success = true;
 
   try {
-    bytes = socket().send_to(sendStreambuf().data(), nn.getRemoteUdpEndpoint());
+    bytes = socket().send_to(sendStreambuf().data(), target);
   } catch(const std::exception& e) {
     PARACOOBA_LOG(logger(), LocalError)
-      << "Exception encountered when sending message to endpoint "
-      << nn.getRemoteUdpEndpoint() << "! Message: " << e.what();
+      << "Exception encountered when sending message to endpoint " << target
+      << "! Message: " << e.what();
     success = false;
   }
   if(bytes != bytesToSend) {
@@ -145,6 +161,5 @@ UDPServer::transmitMessage(const messages::Message& msg,
   sendStreambuf().consume(sendStreambuf().size() + 1);
   sendFinishedCB(success);
 }
-
 }
 }

@@ -42,20 +42,19 @@ BOOST_LOG_ATTRIBUTE_KEYWORD(paracooba_logger_context_meta,
 
 BOOST_LOG_ATTRIBUTE_KEYWORD(paracooba_logger_thread_name,
                             "ThreadName",
-                            std::string)
+                            std::string_view)
 
-template<typename T>
-using Constant = boost::log::attributes::constant<T>;
-
-thread_local MutableConstant<int> lineAttr = MutableConstant<int>(5);
+thread_local MutableConstant<int> lineAttr = MutableConstant<int>(0);
 thread_local MutableConstant<const char*> fileAttr =
   MutableConstant<const char*>("");
 thread_local MutableConstant<const char*> functionAttr =
   MutableConstant<const char*>("");
-thread_local MutableConstant<std::string> threadNameAttr =
-  MutableConstant<std::string>("");
-thread_local bool threadNameAttrSet = false;
-thread_local std::string paracCurrentThreadName = "";
+thread_local MutableConstant<std::string_view> threadNameAttr =
+  MutableConstant<std::string_view>("");
+thread_local MutableConstant<std::string_view> localNameAttr =
+  MutableConstant<std::string_view>("Unnamed Thread");
+
+bool LogSinksSetup = false;
 
 namespace paracooba {
 
@@ -66,23 +65,22 @@ BOOST_LOG_INLINE_GLOBAL_LOGGER_INIT(global_logger,
   lg.add_attribute("Line", lineAttr);
   lg.add_attribute("File", fileAttr);
   lg.add_attribute("Function", functionAttr);
-  lg.add_attribute(
-    "ThreadName",
-    boost::log::attributes::make_constant<std::string>("UnknownThread"));
+  lg.add_attribute("ThreadName", threadNameAttr);
   return lg;
 }
 
 Log::Log(ConfigPtr config)
   : m_config(config)
 {
+  initLocalThread("Main");
+  assert(getThreadLocalData().threadName == "Main");
+
   // Initialise global logging attributes for all loggers.
   try {
     logging::core::get()->add_global_attribute(
       "Timestamp", logging::attributes::local_clock());
-    logging::core::get()->add_global_attribute(
-      "LocalName",
-      logging::attributes::constant<std::string_view>(
-        config->getString(Config::LocalName)));
+    logging::core::get()->add_global_attribute("LocalName", localNameAttr);
+    logging::core::get()->add_global_attribute("ThreadName", threadNameAttr);
     logging::add_common_attributes();
 
     // Logging Filter
@@ -108,21 +106,24 @@ Log::Log(ConfigPtr config)
     auto& targetStream =
       m_config->useSTDOUTForLogging() ? std::cout : std::clog;
 
-    m_consoleSink = logging::add_console_log(
-      targetStream,
-      keywords::format =
-        (expr::stream
-         << "[" << paracooba_logger_timestamp << "] ["
-         << paracooba_logger_localname << "] [" << paracooba_logger_thread_name
-         << "] "
-         << expr::if_(expr::has_attr<std::string>(
-              "ContextMeta"))[expr::stream
-                              << "[" << paracooba_logger_context << "<"
-                              << paracooba_logger_context_meta << ">]"]
-              .else_[expr::stream << "[" << paracooba_logger_context << "]"]
-         << " [" << expr::attr<Log::Severity, Log::Severity_Tag>("Severity")
-         << "] " << expr::smessage));
-    boost::log::core::get()->add_sink(m_consoleSink);
+    if(!LogSinksSetup) {
+      m_consoleSink = logging::add_console_log(
+        targetStream,
+        keywords::format =
+          (expr::stream
+           << "[" << paracooba_logger_timestamp << "] ["
+           << paracooba_logger_localname << "] ["
+           << paracooba_logger_thread_name << "] "
+           << expr::if_(expr::has_attr<std::string>(
+                "ContextMeta"))[expr::stream
+                                << "[" << paracooba_logger_context << "<"
+                                << paracooba_logger_context_meta << ">]"]
+                .else_[expr::stream << "[" << paracooba_logger_context << "]"]
+           << " [" << expr::attr<Log::Severity, Log::Severity_Tag>("Severity")
+           << "] " << expr::smessage));
+      boost::log::core::get()->add_sink(m_consoleSink);
+      LogSinksSetup = true;
+    }
   } catch(const std::exception& e) {
     std::cerr << "> Exception during initialisation of log sinks! Error: "
               << e.what() << std::endl;
@@ -142,35 +143,43 @@ createGenericLogger(const std::string& context, const std::string& meta)
     lg.add_attribute("ContextMeta",
                      boost::log::attributes::make_constant(meta));
 
-  if(!threadNameAttrSet) {
-    std::string threadName = context;
-    if(meta != "")
-      threadName += "<" + meta + ">";
-    threadNameAttrSet = true;
-    paracCurrentThreadName = threadName;
-  }
-  lg.add_attribute("ThreadName", threadNameAttr);
-
   return std::move(lg);
 }
 
-boost::log::sources::severity_logger<Log::Severity>
+template<typename Logger>
+static Log::Handle<Logger>
+createGenericLoggerHandle(Logger&& logger, Log& log)
+{
+  return Log::Handle<Logger>{ logger, log };
+}
+
+Logger
 Log::createLogger(const std::string& context, const std::string& meta)
 {
-  return createGenericLogger<
-    boost::log::sources::severity_logger<Log::Severity>>(context, meta);
+  return createGenericLoggerHandle(
+    createGenericLogger<boost::log::sources::severity_logger<Log::Severity>>(
+      context, meta),
+    *this);
 }
-boost::log::sources::severity_logger_mt<Log::Severity>
+LoggerMT
 Log::createLoggerMT(const std::string& context, const std::string& meta)
 {
-  return createGenericLogger<
-    boost::log::sources::severity_logger_mt<Log::Severity>>(context, meta);
+  return createGenericLoggerHandle(
+    createGenericLogger<boost::log::sources::severity_logger_mt<Log::Severity>>(
+      context, meta),
+    *this);
 }
 
 bool
 Log::isLogLevelEnabled(Severity sev)
 {
   return sev >= m_targetSeverity;
+}
+
+std::string_view
+Log::getLocalName()
+{
+  return m_config->getString(Config::LocalName);
 }
 
 std::ostream&
@@ -219,7 +228,8 @@ operator<<(
 
   ::paracooba::Log::Severity level = manip.get();
 
-  if(static_cast<std::size_t>(level) < sizeof(*strings) / sizeof(**strings))
+  if(static_cast<std::size_t>(level) <
+     sizeof(uncolorised_strings) / sizeof(**strings))
     strm << strings[level];
   else
     strm << static_cast<int>(level);

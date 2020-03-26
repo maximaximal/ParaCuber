@@ -45,6 +45,7 @@ class Connection
     TransmitCNF,
     TransmitJobDescription,
     TransmitControlMessage,
+    TransmitEndToken,
     TransmitModeUnknown
   };
 
@@ -54,8 +55,13 @@ class Connection
     RestartAfterShutdown
   };
 
-  using SendItem = std::
-    variant<std::shared_ptr<CNF>, messages::Message, messages::JobDescription>;
+  struct EndTokenTag
+  {};
+
+  using SendItem = std::variant<std::shared_ptr<CNF>,
+                                messages::Message,
+                                messages::JobDescription,
+                                EndTokenTag>;
   using ContextPtr = Daemon::Context*;
 
   struct SendQueueEntry
@@ -65,6 +71,7 @@ class Connection
     SendQueueEntry(std::shared_ptr<CNF> cnf);
     SendQueueEntry(const messages::Message& msg);
     SendQueueEntry(const messages::JobDescription& jd);
+    SendQueueEntry(EndTokenTag endTokenTag);
     ~SendQueueEntry();
 
     std::unique_ptr<SendItem> sendItem;
@@ -77,7 +84,8 @@ class Connection
                    ConfigPtr config,
                    ClusterNodeStore& clusterNodeStore,
                    messages::MessageReceiver& msgRec,
-                   messages::JobDescriptionReceiverProvider& jdRecProv);
+                   messages::JobDescriptionReceiverProvider& jdRecProv,
+                   uint16_t retries);
     ~State();
 
     boost::asio::io_service& ioService;
@@ -122,13 +130,17 @@ class Connection
     ConfigPtr config,
     ClusterNodeStore& clusterNodeStore,
     messages::MessageReceiver& msgReceiver,
-    messages::JobDescriptionReceiverProvider& jdReceiverProvider);
+    messages::JobDescriptionReceiverProvider& jdReceiverProvider,
+    uint16_t retries = 0);
+
+  Connection(const Connection& conn);
 
   virtual ~Connection();
 
   void sendCNF(std::shared_ptr<CNF> cnf);
   void sendMessage(const messages::Message& msg);
   void sendJobDescription(const messages::JobDescription& jd);
+  void sendEndToken();
   void sendSendQueueEntry(SendQueueEntry&& e);
 
   void readHandler(boost::system::error_code ec = boost::system::error_code(),
@@ -227,6 +239,8 @@ ConnectionModeToStr(Connection::Mode mode)
       return "TransmitJobDescription";
     case Connection::Mode::TransmitControlMessage:
       return "TransmitControlMessage";
+    case Connection::Mode::TransmitEndToken:
+      return "TransmitEndToken";
     case Connection::Mode::TransmitModeUnknown:
       return "TransmitModeUnknown";
   }

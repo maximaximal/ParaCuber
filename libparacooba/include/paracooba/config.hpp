@@ -7,6 +7,8 @@
 #include <string_view>
 #include <variant>
 
+#include "types.hpp"
+
 namespace paracooba {
 class Client;
 class Daemon;
@@ -90,35 +92,45 @@ class Config
   {
     return std::get<T>(m_config[key]);
   }
+  /** @brief Get a configuration variable with type and key.
+   */
+  template<typename T>
+  inline const T& get(Key key) const
+  {
+    return std::get<T>(m_config[key]);
+  }
   /** @brief Get a std::string configuration variable.
    */
-  inline std::string_view getString(Key key)
+  inline std::string_view getString(Key key) const
   {
-    std::string& str = get<std::string>(key);
+    const std::string& str = get<std::string>(key);
     return std::string_view{ str.c_str(), str.size() };
   }
   /** @brief Get an uint16 configuration variable.
    */
-  inline uint16_t getUint16(Key key) { return get<uint16_t>(key); }
+  inline uint16_t getUint16(Key key) const { return get<uint16_t>(key); }
   /** @brief Get an uint32 configuration variable.
    */
-  inline uint32_t getUint32(Key key) { return get<uint32_t>(key); }
+  inline uint32_t getUint32(Key key) const { return get<uint32_t>(key); }
   /** @brief Get an uint64 configuration variable.
    */
-  inline uint64_t getUint64(Key key) { return get<uint64_t>(key); }
+  inline uint64_t getUint64(Key key) const { return get<uint64_t>(key); }
   /** @brief Get an int32 configuration variable.
    */
-  inline int32_t getInt32(Key key) { return get<int32_t>(key); }
+  inline int32_t getInt32(Key key) const { return get<int32_t>(key); }
   /** @brief Get an int64 configuration variable.
    */
-  inline int64_t getInt64(Key key) { return get<int64_t>(key); }
+  inline int64_t getInt64(Key key) const { return get<int64_t>(key); }
   /** @brief Get a float configuration variable.
    */
-  inline float getFloat(Key key) { return get<float>(key); }
+  inline float getFloat(Key key) const { return get<float>(key); }
 
   /** @brief Get a configuration variable which can be cast in any way.
    */
   inline ConfigVariant& get(Key key) { return m_config[key]; }
+  /** @brief Get a configuration variable which can be cast in any way.
+   */
+  inline const ConfigVariant& get(Key key) const { return m_config[key]; }
   /** @brief Set a configuration variable.
    */
   inline void set(Key key, ConfigVariant&& val) { m_config[key] = val; }
@@ -155,6 +167,8 @@ class Config
   inline bool isLimitedTreeDumpActive() { return m_limitedTreeDump; }
 
   int64_t generateId(int64_t uniqueNumber);
+
+  ID getId() const;
 
   Client* getClient()
   {

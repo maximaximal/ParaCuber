@@ -1,5 +1,12 @@
 #include "../../include/paracooba/net/control.hpp"
+#include "../../include/paracooba/cluster-node-store.hpp"
+#include "../../include/paracooba/cluster-node.hpp"
+#include "../../include/paracooba/cnftree.hpp"
+#include "../../include/paracooba/config.hpp"
+#include "../../include/paracooba/daemon.hpp"
 #include "../../include/paracooba/messages/message.hpp"
+
+#include <regex>
 
 namespace paracooba {
 namespace net {
@@ -67,10 +74,8 @@ Control::handleOfflineAnnouncement(const messages::Message& msg,
   const messages::OfflineAnnouncement& offlineAnnouncement =
     msg.getOfflineAnnouncement();
 
-  clusterNodeStore()->removeNode(msg.getOrigin(),
-                                 offlineAnnouncement.getReason());
-
-  m_communicator->checkAndTransmitClusterStatisticsChanges();
+  m_clusterNodeStore.removeNode(msg.getOrigin(),
+                                offlineAnnouncement.getReason());
 }
 void
 Control::handleAnnouncementRequest(const messages::Message& msg,
@@ -80,48 +85,31 @@ Control::handleAnnouncementRequest(const messages::Message& msg,
     msg.getAnnouncementRequest();
   const messages::Node& requester = announcementRequest.getRequester();
 
-  auto [statisticsNode, inserted] =
-    clusterNodeStore()->getOrCreateNode(requester.getId());
+  auto [clusterNode, inserted] =
+    m_clusterNodeStore.getOrCreateNode(requester.getId());
 
-  applyMessageNodeToStatsNode(requester, statisticsNode);
-
-  networkStatisticsNode(statisticsNode);
-
-  if(!m_communicator->m_config->isDaemonMode()) {
-    if(requester.getDaemonMode()) {
-      m_communicator->sendCNFToNode(
-        m_communicator->m_config->getClient()->getRootCNF(),
-        statisticsNode.getId());
-    }
-  }
+  clusterNode.applyAnnouncementRequestMessage(announcementRequest);
 
   switch(announcementRequest.getNameMatchType()) {
     case messages::AnnouncementRequest::NameMatch::NO_RESTRICTION:
       break;
     case messages::AnnouncementRequest::NameMatch::REGEX:
-      if(!std::regex_match(
-           std::string(m_communicator->m_config->getString(Config::LocalName)),
-           std::regex(announcementRequest.getRegexMatch()))) {
+      if(!std::regex_match(std::string(m_config->getString(Config::LocalName)),
+                           std::regex(announcementRequest.getRegexMatch()))) {
         PARACOOBA_LOG(m_logger, Trace)
           << "No regex match! Regex: " << announcementRequest.getRegexMatch();
         return;
       }
       break;
     case messages::AnnouncementRequest::NameMatch::ID:
-      if(m_communicator->m_config->getInt64(Config::Id) !=
-         announcementRequest.getIdMatch()) {
+      if(m_config->getInt64(Config::Id) != announcementRequest.getIdMatch()) {
         return;
       }
   }
 
-  if(requester.getId() != m_communicator->m_config->getInt64(Config::Id)) {
-    m_communicator->m_ioService.post(
-      std::bind(&Communicator::task_announce,
-                m_communicator,
-                statisticsNode.getNetworkedNode()));
+  if(requester.getId() != m_config->getInt64(Config::Id)) {
+    announceTo(nn);
   }
-
-  analyseKnownPeersOfNode(requester);
 }
 void
 Control::handleNodeStatus(const messages::Message& msg, NetworkedNode& nn)
@@ -130,16 +118,9 @@ Control::handleNodeStatus(const messages::Message& msg, NetworkedNode& nn)
 
   int64_t id = msg.getOrigin();
 
-  auto [statisticsNode, inserted] = clusterNodeStore()->getOrCreateNode(id);
+  auto [clusterNode, inserted] = m_clusterNodeStore.getOrCreateNode(id);
 
-  statisticsNode.statusReceived();
-
-  applyMessageNodeStatusToStatsNode(
-    nodeStatus, statisticsNode, *m_communicator->m_config);
-
-  networkStatisticsNode(statisticsNode);
-
-  m_communicator->checkAndTransmitClusterStatisticsChanges();
+  clusterNode.applyNodeStatusMessage(nodeStatus);
 }
 void
 Control::handleCNFTreeNodeStatusRequest(const messages::Message& msg,
@@ -150,16 +131,13 @@ Control::handleCNFTreeNodeStatusRequest(const messages::Message& msg,
 
   int64_t originId = msg.getOrigin();
   int64_t cnfId = cnfTreeNodeStatusRequest.getCnfId();
-  CNFTree::Path path = cnfTreeNodeStatusRequest.getPath();
+  Path path = cnfTreeNodeStatusRequest.getPath();
 
   CNF* cnf = nullptr;
-  auto [statisticsNode, inserted] =
-    clusterNodeStore()->getOrCreateNode(originId);
-  networkStatisticsNode(statisticsNode);
+  auto [clusterNode, inserted] = m_clusterNodeStore.getOrCreateNode(originId);
 
-  if(m_communicator->m_config->isDaemonMode()) {
-    auto [context, lock] =
-      m_communicator->m_config->getDaemon()->getContext(cnfId);
+  if(m_config->isDaemonMode()) {
+    auto [context, lock] = m_config->getDaemon()->getContext(cnfId);
     if(!context) {
       PARACOOBA_LOG(m_logger, GlobalWarning)
         << "CNFTreeNodeStatusRequest received before Context for ID " << cnfId
@@ -175,8 +153,6 @@ Control::handleCNFTreeNodeStatusRequest(const messages::Message& msg,
       << "!";
     return;
   }
-
-  m_communicator->requestCNFTreePathInfo(cnfTreeNodeStatusRequest);
 }
 void
 Control::handleCNFTreeNodeStatusReply(const messages::Message& msg,
@@ -206,6 +182,7 @@ Control::handleCNFTreeNodeStatusReply(const messages::Message& msg,
   PARACOOBA_LOG(m_logger, Trace)
     << "Receive CNFTree info for path " << CNFTree::pathToStrNoAlloc(path);
 
+  /*
   if(handleStack.size() == 1) {
     // This reply arrived at the original sender! Inject all available
     // information.
@@ -224,6 +201,7 @@ Control::handleCNFTreeNodeStatusReply(const messages::Message& msg,
     replyMsg.insertCNFTreeNodeStatusReply(std::move(reply));
     sendMessage(cnfTreeNodeStatusReply.getHandle(), replyMsg, false);
   }
+  */
 }
 }
 }

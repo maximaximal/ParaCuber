@@ -30,7 +30,7 @@ TaskFactory::~TaskFactory()
 }
 
 void
-TaskFactory::addPath(CNFTree::Path p,
+TaskFactory::addPath(Path p,
                      Mode mode,
                      int64_t originator,
                      OptionalCube optionalCube)
@@ -172,7 +172,7 @@ TaskFactory::getNumberOfUnansweredRemoteWork() const
 
 void
 TaskFactory::addExternallyProcessingTask(int64_t originator,
-                                         CNFTree::Path p,
+                                         Path p,
                                          ClusterNode& node)
 {
   std::unique_lock lock(m_externalTasksSetMapMutex);
@@ -195,7 +195,7 @@ TaskFactory::addExternallyProcessingTask(int64_t originator,
 }
 
 void
-TaskFactory::removeExternallyProcessedTask(CNFTree::Path p,
+TaskFactory::removeExternallyProcessedTask(Path p,
                                            int64_t id,
                                            bool reset)
 {
@@ -226,7 +226,7 @@ TaskFactory::ExternalTasksSet::readdTasks(TaskFactory* factory)
 }
 
 TaskSkeleton
-TaskFactory::ExternalTasksSet::removeTask(CNFTree::Path p)
+TaskFactory::ExternalTasksSet::removeTask(Path p)
 {
   for(auto it = tasks.begin(); it != tasks.end();) {
     if(it->p == p) {

@@ -47,20 +47,20 @@ Pregenerated::init()
 }
 
 bool
-Pregenerated::shouldGenerateTreeSplit(CNFTree::Path path)
+Pregenerated::shouldGenerateTreeSplit(Path path)
 {
   size_t depth = CNFTree::getDepth(path);
   size_t possibleSolvers = 1u << depth;
   return possibleSolvers < (m_cubesJumpList.size() - 1);
 }
 bool
-Pregenerated::getCube(CNFTree::Path path, std::vector<int>& literals)
+Pregenerated::getCube(Path path, std::vector<int>& literals)
 {
   // This happens when the tree has not come to decisions yet.
   if(CNFTree::getDepth(path) != m_normalizedPathLength)
     return true;
 
-  CNFTree::Path depthShifted = CNFTree::getDepthShiftedPath(
+  Path depthShifted = CNFTree::getDepthShiftedPath(
     CNFTree::setDepth(path, m_normalizedPathLength));
 
   if(depthShifted >= m_cubesJumpList.size() - 1) {

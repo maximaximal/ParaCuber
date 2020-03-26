@@ -18,18 +18,18 @@ class LiteralFrequency : public Cuber
   explicit LiteralFrequency(ConfigPtr config,
                             LogPtr log,
                             CNF& rootCNF,
-                            Cuber::LiteralMap* allowanceMap);
+                            LiteralMap* allowanceMap);
   virtual ~LiteralFrequency();
 
   bool init();
 
-  virtual bool shouldGenerateTreeSplit(CNFTree::Path path);
-  virtual bool getCube(CNFTree::Path path, std::vector<int>& literals);
+  virtual bool shouldGenerateTreeSplit(Path path);
+  virtual bool getCube(Path path, Cube& literals);
 
-  Cuber::LiteralMap* getLiteralFrequency() { return m_literalFrequency; }
+  LiteralMap* getLiteralFrequency() { return m_literalFrequency; }
 
   private:
-  Cuber::LiteralMap* m_literalFrequency;
+  LiteralMap* m_literalFrequency;
   size_t m_counter = 0;
 };
 }

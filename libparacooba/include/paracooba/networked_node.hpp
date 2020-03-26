@@ -4,9 +4,11 @@
 #include <atomic>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
+#include <pthread.h>
 
 #include "messages/jobdescription_transmitter.hpp"
 #include "messages/message_receiver.hpp"
+#include "readywaiter.hpp"
 #include "types.hpp"
 
 namespace paracooba {
@@ -19,6 +21,8 @@ class NetworkedNode
   , public messages::MessageTransmitter
 {
   public:
+  using ConnectionReadyWaiter = ReadyWaiter<net::Connection>;
+
   explicit NetworkedNode(
     ID id,
     messages::MessageTransmitter& statelessMessageTransmitter);
@@ -44,12 +48,12 @@ class NetworkedNode
     m_tcpEndpointSet = true;
   }
 
-  virtual void transmitMessage(const messages::Message& jd,
+  virtual void transmitMessage(const messages::Message& msg,
                                NetworkedNode& nn,
-                               SuccessCB sendFinishedCB);
+                               SuccessCB sendFinishedCB = EmptySuccessCB);
 
   virtual void transmitJobDescription(messages::JobDescription&& jd,
-                                      int64_t id,
+                                      NetworkedNode& nn,
                                       SuccessCB sendFinishedCB);
 
   void setUdpPort(uint16_t p)
@@ -73,6 +77,10 @@ class NetworkedNode
   void requestDeletion() { m_deletionRequested = true; }
 
   bool assignConnection(const net::Connection& conn);
+  ConnectionReadyWaiter& getConnectionReadyWaiter()
+  {
+    return m_connectionReadyWaiter;
+  }
 
   bool isUdpEndpointSet() const { return m_udpEndpointSet; }
   bool isTcpEndpointSet() const { return m_tcpEndpointSet; }
@@ -94,6 +102,7 @@ class NetworkedNode
 
   messages::MessageTransmitter& m_statelessMessageTransmitter;
   std::unique_ptr<net::Connection> m_connection;
+  ConnectionReadyWaiter m_connectionReadyWaiter;
 };
 }
 

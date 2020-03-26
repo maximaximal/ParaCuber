@@ -11,7 +11,7 @@
 
 namespace paracooba {
 DecisionTask::DecisionTask(std::shared_ptr<CNF> rootCNF,
-                           CNFTree::Path p,
+                           Path p,
                            const OptionalCube& optionalCube)
   : m_rootCNF(rootCNF)
   , m_path(p)
@@ -61,7 +61,7 @@ DecisionTask::execute()
     // of distribution to other compute nodes.
     {
       // LEFT
-      CNFTree::Path p = CNFTree::getNextLeftPath(m_path);
+      Path p = CNFTree::getNextLeftPath(m_path);
       if(cuberRegistry.getCube(p, testLiterals)) {
         m_factory->addPath(p, TaskFactory::CubeOrSolve, m_originator);
       } else {
@@ -70,7 +70,7 @@ DecisionTask::execute()
     }
     {
       // RIGHT
-      CNFTree::Path p = CNFTree::getNextRightPath(m_path);
+      Path p = CNFTree::getNextRightPath(m_path);
       if(cuberRegistry.getCube(p, testLiterals)) {
         m_factory->addPath(p, TaskFactory::CubeOrSolve, m_originator);
       } else {

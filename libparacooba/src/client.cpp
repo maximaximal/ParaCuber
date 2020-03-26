@@ -5,6 +5,8 @@
 #include "../include/paracooba/config.hpp"
 #include "../include/paracooba/cuber/registry.hpp"
 #include "../include/paracooba/daemon.hpp"
+#include "../include/paracooba/net/connection.hpp"
+#include "../include/paracooba/networked_node.hpp"
 #include "../include/paracooba/runner.hpp"
 #include "../include/paracooba/task_factory.hpp"
 
@@ -16,8 +18,20 @@ Client::Client(ConfigPtr config, LogPtr log, CommunicatorPtr communicator)
   , m_communicator(communicator)
 {
   m_config->m_client = this;
-  m_rootCNF = std::make_shared<CNF>(
-    config, log, config->getInt64(Config::Id), getDIMACSSourcePathFromConfig());
+  m_rootCNF = std::make_shared<CNF>(config,
+                                    log,
+                                    config->getInt64(Config::Id),
+                                    *communicator->getClusterStatistics(),
+                                    getDIMACSSourcePathFromConfig());
+
+  // Connect to node fully known signal, so fully known nodes receive the CNF
+  // from this client.
+  m_communicator->getClusterStatistics()->getNodeFullyKnownSignal().connect(
+    [this](const ClusterNode& node) {
+      NetworkedNode* nn = node.getNetworkedNode();
+      assert(nn);
+      nn->getConnectionReadyWaiter();
+    });
 }
 Client::~Client()
 {

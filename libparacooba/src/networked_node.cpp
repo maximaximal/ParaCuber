@@ -14,16 +14,20 @@ NetworkedNode::NetworkedNode(
 NetworkedNode::~NetworkedNode() {}
 
 void
-NetworkedNode::transmitMessage(const messages::Message& jd,
+NetworkedNode::transmitMessage(const messages::Message& msg,
                                NetworkedNode& nn,
                                SuccessCB sendFinishedCB)
-{}
+{
+  assert(&nn == this);
+}
 
 void
 NetworkedNode::transmitJobDescription(messages::JobDescription&& jd,
-                                      int64_t id,
+                                      NetworkedNode& nn,
                                       SuccessCB sendFinishedCB)
-{}
+{
+  assert(&nn == this);
+}
 
 bool
 NetworkedNode::assignConnection(const net::Connection& conn)
