@@ -22,7 +22,9 @@ UDPServer::State::State(boost::asio::io_service& ioService,
   , broadcastEndpoint(broadcastEndpoint)
   , logger(log->createLogger("UDPServer"))
   , messageReceiver(messageReceiver)
-{}
+{
+  socket.set_option(boost::asio::socket_base::broadcast(true));
+}
 
 UDPServer::State::~State()
 {
@@ -57,11 +59,10 @@ UDPServer::startAccepting(ClusterNodeStore& clusterNodeStore,
   NetworkedNode* nn = thisNode.getNetworkedNode();
   assert(nn);
   nn->setRemoteUdpEndpoint(endpoint);
-  socket().open(endpoint.protocol());
-  socket().set_option(boost::asio::socket_base::broadcast(true));
-  socket().bind(endpoint);
   accept();
-  PARACOOBA_LOG(logger(), Debug) << "UDPServer started at " << endpoint;
+  PARACOOBA_LOG(logger(), Debug)
+    << "UDPServer started at " << endpoint << " with broadcast endpoint "
+    << broadcastEndpoint();
 }
 
 void
@@ -77,11 +78,17 @@ void
 UDPServer::operator()(const boost::system::error_code& ec,
                       size_t bytes_received)
 {
+  enrichLogger();
+
   if(!ec || ec == boost::asio::error::message_size) {
     reenter(this)
     {
       yield socket().async_receive_from(
         recvStreambuf().prepare(REC_BUF_SIZE), remoteEndpoint(), *this);
+
+      PARACOOBA_LOG(logger(), NetTrace)
+        << "Receive message of " << bytes_received << " bytes from "
+        << remoteEndpoint() << ". Trying to decode.";
 
       try {
         messages::Message msg;
@@ -120,6 +127,10 @@ UDPServer::transmitMessage(const messages::Message& msg,
                            NetworkedNode& nn,
                            SuccessCB successCB)
 {
+  if(!nn.isUdpPortSet() || !nn.isUdpEndpointSet()) {
+    successCB(false);
+    return;
+  }
   assert(nn.isUdpEndpointSet());
   assert(nn.isUdpPortSet());
   transmitMessageToEndpoint(msg, nn.getRemoteUdpEndpoint(), successCB);
@@ -145,6 +156,10 @@ UDPServer::transmitMessageToEndpoint(const messages::Message& msg,
   size_t bytesToSend = sendStreambuf().size();
   bool success = true;
 
+  PARACOOBA_LOG(logger(), NetTrace)
+    << "Transmit ControlMessage of type " << msg.getType() << " with size "
+    << bytesToSend << " to " << target;
+
   try {
     bytes = socket().send_to(sendStreambuf().data(), target);
   } catch(const std::exception& e) {
@@ -160,6 +175,19 @@ UDPServer::transmitMessageToEndpoint(const messages::Message& msg,
   }
   sendStreambuf().consume(sendStreambuf().size() + 1);
   sendFinishedCB(success);
+}
+void
+UDPServer::enrichLogger()
+{
+  if(!logger().log->isLogLevelEnabled(Log::NetTrace))
+    return;
+
+  std::stringstream m;
+  m << "{";
+  m << "R:'" << remoteEndpoint() << "'";
+  m << "}";
+
+  logger().setMeta(m.str());
 }
 }
 }

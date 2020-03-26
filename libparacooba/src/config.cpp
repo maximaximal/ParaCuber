@@ -277,7 +277,7 @@ Config::getInternalWebserverDefaultDocRoot()
 }
 
 messages::Node
-Config::buildNode()
+Config::buildNode() const
 {
   uint64_t maxCPUFreq = 0;
   uint64_t workQueueSize = getCommunicator()->getRunner()->getWorkQueueSize();

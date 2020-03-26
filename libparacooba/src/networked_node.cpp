@@ -19,6 +19,12 @@ NetworkedNode::transmitMessage(const messages::Message& msg,
                                SuccessCB sendFinishedCB)
 {
   assert(&nn == this);
+  if(m_connectionReadyWaiter.isReady()) {
+    assert(m_connection);
+    m_connection->sendMessage(msg, sendFinishedCB);
+  } else {
+    m_statelessMessageTransmitter.transmitMessage(msg, nn, sendFinishedCB);
+  }
 }
 
 void
@@ -27,6 +33,15 @@ NetworkedNode::transmitJobDescription(messages::JobDescription&& jd,
                                       SuccessCB sendFinishedCB)
 {
   assert(&nn == this);
+  assert(m_connectionReadyWaiter.isReady());
+  assert(m_connection);
+  m_connection->sendJobDescription(jd, sendFinishedCB);
+}
+
+bool
+NetworkedNode::isConnectionReady() const
+{
+  return m_connectionReadyWaiter.isReady();
 }
 
 bool
@@ -36,6 +51,14 @@ NetworkedNode::assignConnection(const net::Connection& conn)
     return false;
   }
   m_connection = std::make_unique<net::Connection>(conn);
+  m_connectionReadyWaiter.setReady(m_connection.get());
   return true;
+}
+
+void
+NetworkedNode::resetConnection()
+{
+  m_connectionReadyWaiter.reset();
+  m_connection.reset();
 }
 }

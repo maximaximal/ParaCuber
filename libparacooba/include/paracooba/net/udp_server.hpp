@@ -75,6 +75,7 @@ class UDPServer
   std::shared_ptr<State> m_state;
 
   void accept();
+  void enrichLogger();
 
   boost::asio::ip::udp::socket& socket() { return m_state->socket; }
   boost::asio::ip::udp::endpoint& remoteEndpoint()

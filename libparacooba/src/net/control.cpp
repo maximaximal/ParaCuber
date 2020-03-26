@@ -5,6 +5,7 @@
 #include "../../include/paracooba/config.hpp"
 #include "../../include/paracooba/daemon.hpp"
 #include "../../include/paracooba/messages/message.hpp"
+#include "../../include/paracooba/networked_node.hpp"
 
 #include <regex>
 
@@ -48,6 +49,18 @@ Control::receiveMessage(const messages::Message& msg, NetworkedNode& nn)
       // Nothing to do on unknown messages.
       break;
   }
+}
+
+void
+Control::announceTo(NetworkedNode& nn)
+{
+  nn.onlineAnnouncement(*m_config, nn);
+}
+
+void
+Control::requestAnnouncementFrom(NetworkedNode& nn)
+{
+  nn.announcementRequest(*m_config, nn);
 }
 
 void
@@ -121,6 +134,14 @@ Control::handleNodeStatus(const messages::Message& msg, NetworkedNode& nn)
   auto [clusterNode, inserted] = m_clusterNodeStore.getOrCreateNode(id);
 
   clusterNode.applyNodeStatusMessage(nodeStatus);
+
+  if(!clusterNode.getFullyKnown()) {
+    // Try the default target port as last hope to get to know the other node.
+    NetworkedNode* nn = clusterNode.getNetworkedNode();
+    nn->setUdpPort(m_config->getUint16(Config::UDPTargetPort));
+
+    requestAnnouncementFrom(*nn);
+  }
 }
 void
 Control::handleCNFTreeNodeStatusRequest(const messages::Message& msg,

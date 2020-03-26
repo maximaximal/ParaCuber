@@ -32,7 +32,7 @@ class ReadyWaiter
       m_readyCBs.pop();
     };
   }
-  inline bool isReady() { return m_ready; }
+  inline bool isReady() const { return m_ready; }
   inline void callWhenReady(ReadyCB cb)
   {
     if(isReady()) {

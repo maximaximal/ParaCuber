@@ -140,13 +140,13 @@ class Config
   ConfigVariant& operator[](Key key) { return get(key); }
 
   /** @brief Check if debug mode is active. */
-  inline bool isDebugMode() { return m_debugMode; }
+  inline bool isDebugMode() const { return m_debugMode; }
   /** @brief Check if network debug mode is active. */
-  inline bool isNetworkDebugMode() { return m_networkDebugMode; }
+  inline bool isNetworkDebugMode() const { return m_networkDebugMode; }
   /** @brief Check if info mode is active. */
-  inline bool isInfoMode() { return m_infoMode; }
+  inline bool isInfoMode() const { return m_infoMode; }
   /** @brief Check if daemon mode is active. */
-  inline bool isDaemonMode() { return m_daemonMode; }
+  inline bool isDaemonMode() const { return m_daemonMode; }
 
   /** @brief Set debug mode active. */
   inline void setDebugMode(bool v) { m_debugMode = v; }
@@ -158,13 +158,16 @@ class Config
   inline void setDaemonMode(bool v) { m_daemonMode = v; }
 
   /** @brief Check if STDOUT should be used for logging instead of CLOG. */
-  inline bool useSTDOUTForLogging() { return m_useSTDOUTForLogging; }
+  inline bool useSTDOUTForLogging() const { return m_useSTDOUTForLogging; }
   /** @brief Check if direct client-side solving via CaDiCaL is enabled. */
-  inline bool isClientCaDiCaLEnabled() { return m_enableClientCaDiCaL; }
+  inline bool isClientCaDiCaLEnabled() const { return m_enableClientCaDiCaL; }
   /** @brief Check if internal webserver is enabled. */
-  inline bool isInternalWebserverEnabled() { return m_enableInternalWebserver; }
+  inline bool isInternalWebserverEnabled() const
+  {
+    return m_enableInternalWebserver;
+  }
   /** @brief Check if limited tree dump is set. */
-  inline bool isLimitedTreeDumpActive() { return m_limitedTreeDump; }
+  inline bool isLimitedTreeDumpActive() const { return m_limitedTreeDump; }
 
   int64_t generateId(int64_t uniqueNumber);
 
@@ -175,21 +178,36 @@ class Config
     assert(m_client);
     return m_client;
   }
-  bool hasClient() { return m_daemon; }
+  const Client* getClient() const
+  {
+    assert(m_client);
+    return m_client;
+  }
+  bool hasClient() const { return m_daemon; }
   Daemon* getDaemon()
   {
     assert(m_daemon);
     return m_daemon;
   }
-  bool hasDaemon() { return m_daemon; }
+  const Daemon* getDaemon() const
+  {
+    assert(m_daemon);
+    return m_daemon;
+  }
+  bool hasDaemon() const { return m_daemon; }
   Communicator* getCommunicator()
   {
     assert(m_communicator);
     return m_communicator;
   }
-  bool hasCommunicator() { return m_communicator; }
+  const Communicator* getCommunicator() const
+  {
+    assert(m_communicator);
+    return m_communicator;
+  }
+  bool hasCommunicator() const { return m_communicator; }
 
-  messages::Node buildNode();
+  messages::Node buildNode() const;
 
   private:
   friend class Client;

@@ -17,8 +17,7 @@ class ClusterNodeStore : public messages::JobDescriptionTransmitter
 {
   public:
   using ClusterNodeCreationPair = std::pair<ClusterNode&, bool>;
-  using NodeFullyKnownSignal =
-    boost::signals2::signal<void(const ClusterNode&)>;
+  using NodeFullyKnownSignal = boost::signals2::signal<void(ClusterNode&)>;
 
   virtual const ClusterNode& getNode(int64_t id) const = 0;
   virtual ClusterNode& getNode(int64_t id) = 0;
@@ -26,7 +25,7 @@ class ClusterNodeStore : public messages::JobDescriptionTransmitter
   virtual bool hasNode(ID id) const = 0;
   virtual void removeNode(int64_t id, const std::string& reason) = 0;
 
-  virtual void nodeFullyKnown(const ClusterNode& node)
+  virtual void nodeFullyKnown(ClusterNode& node)
   {
     m_nodeFullyKnownSignal(node);
   }

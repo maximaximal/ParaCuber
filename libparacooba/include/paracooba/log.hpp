@@ -79,6 +79,12 @@ class Log
       log = o.log;
       return *this;
     }
+    void setMeta(const std::string& meta)
+    {
+      logger.add_attribute("ContextMeta",
+                           boost::log::attributes::make_constant(meta));
+    }
+    void resetMeta() { logger.remove_attribute("ContextMeta"); }
     LoggerType logger;
     Log* log;
   };

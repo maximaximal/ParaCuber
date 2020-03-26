@@ -67,14 +67,20 @@ class Connection
   struct SendQueueEntry
   {
     SendQueueEntry();
-    SendQueueEntry(const SendQueueEntry& o);
-    SendQueueEntry(std::shared_ptr<CNF> cnf);
-    SendQueueEntry(const messages::Message& msg);
-    SendQueueEntry(const messages::JobDescription& jd);
-    SendQueueEntry(EndTokenTag endTokenTag);
+    SendQueueEntry(const SendQueueEntry& o,
+                   SuccessCB sendFinishedCB = EmptySuccessCB);
+    SendQueueEntry(std::shared_ptr<CNF> cnf,
+                   SuccessCB sendFinishedCB = EmptySuccessCB);
+    SendQueueEntry(const messages::Message& msg,
+                   SuccessCB sendFinishedCB = EmptySuccessCB);
+    SendQueueEntry(const messages::JobDescription& jd,
+                   SuccessCB sendFinishedCB = EmptySuccessCB);
+    SendQueueEntry(EndTokenTag endTokenTag,
+                   SuccessCB sendFinishedCB = EmptySuccessCB);
     ~SendQueueEntry();
 
     std::unique_ptr<SendItem> sendItem;
+    SuccessCB sendFinishedCB = EmptySuccessCB;
   };
 
   struct State
@@ -114,6 +120,7 @@ class Connection
     std::mutex sendQueueMutex;
     std::queue<SendQueueEntry> sendQueue;
     std::unique_ptr<SendItem> currentSendItem;
+    SuccessCB currentSendFinishedCB = EmptySuccessCB;
 
     boost::asio::coroutine readCoro;
     boost::asio::coroutine writeCoro;
@@ -137,9 +144,12 @@ class Connection
 
   virtual ~Connection();
 
-  void sendCNF(std::shared_ptr<CNF> cnf);
-  void sendMessage(const messages::Message& msg);
-  void sendJobDescription(const messages::JobDescription& jd);
+  void sendCNF(std::shared_ptr<CNF> cnf,
+               SuccessCB sendFinishedCB = EmptySuccessCB);
+  void sendMessage(const messages::Message& msg,
+                   SuccessCB sendFinishedCB = EmptySuccessCB);
+  void sendJobDescription(const messages::JobDescription& jd,
+                          SuccessCB sendFinishedCB = EmptySuccessCB);
   void sendEndToken();
   void sendSendQueueEntry(SendQueueEntry&& e);
 
@@ -167,7 +177,7 @@ class Connection
 
   boost::asio::streambuf& recvStreambuf() { return m_state->recvStreambuf; }
   boost::asio::streambuf& sendStreambuf() { return m_state->sendStreambuf; }
-  Logger& logger() { return m_state->logger; }
+  Logger& logger();
   int64_t& thisId() { return m_state->thisId; }
   int64_t& remoteId() { return m_state->remoteId; }
   uint64_t& size() { return m_state->size; }
@@ -190,6 +200,7 @@ class Connection
   {
     return m_state->currentSendItem;
   }
+  SuccessCB& currentSendFinishedCB() { return m_state->currentSendFinishedCB; }
   ConfigPtr& config() { return m_state->config; }
   ClusterNodeStore& clusterNodeStore() { return m_state->clusterNodeStore; }
   ContextPtr& context() { return m_state->context; }

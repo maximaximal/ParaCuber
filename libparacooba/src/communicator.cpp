@@ -2,9 +2,7 @@
 #include "../include/paracooba/client.hpp"
 #include "../include/paracooba/cnf.hpp"
 #include "../include/paracooba/config.hpp"
-#include "../include/paracooba/cuber/registry.hpp"
 #include "../include/paracooba/daemon.hpp"
-#include "../include/paracooba/net/udp_server.hpp"
 #include "../include/paracooba/networked_node.hpp"
 #include "../include/paracooba/runner.hpp"
 
@@ -21,33 +19,18 @@
 #include "paracooba/messages/online_announcement.hpp"
 
 #include <boost/asio.hpp>
-#include <boost/asio/buffer.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/high_resolution_timer.hpp>
-#include <boost/asio/ip/address.hpp>
-#include <boost/asio/ip/address_v4.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/socket_base.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/bind.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/system/error_code.hpp>
 #include <cassert>
 #include <chrono>
 #include <mutex>
-#include <netinet/in.h>
 #include <regex>
 #include <sstream>
-
-#include <cereal/archives/binary.hpp>
-#include <stdexcept>
 
 #ifdef ENABLE_INTERNAL_WEBSERVER
 #include "../include/paracooba/webserver/api.hpp"
 #endif
-
-#define REC_BUF_SIZE 4096
 
 using boost::asio::ip::udp;
 
@@ -87,6 +70,8 @@ Communicator::Communicator(ConfigPtr config, LogPtr log)
   , m_logger(log->createLogger("Communicator"))
   , m_signalSet(std::make_unique<boost::asio::signal_set>(m_ioService, SIGINT))
   , m_clusterStatistics(std::make_shared<ClusterStatistics>(config, log))
+  , m_control(
+      std::make_unique<net::Control>(m_config, m_log, *m_clusterStatistics))
   , m_tickTimer(
       (m_ioService),
       std::chrono::milliseconds(m_config->getUint64(Config::TickMilliseconds)))
@@ -115,11 +100,12 @@ Communicator::run()
 {
   using namespace boost::asio;
 
-  // First, init the local node in cluster statistics with all set variables.
-  m_clusterStatistics->initLocalNode();
-
   if(!listenForIncomingUDP(m_config->getUint16(Config::UDPListenPort)))
     return;
+
+  m_clusterStatistics->setStatelessMessageTransmitter(*m_udpServer);
+  m_clusterStatistics->initLocalNode();
+
   if(!listenForIncomingTCP(m_config->getUint16(Config::TCPListenPort)))
     return;
 
@@ -129,6 +115,10 @@ Communicator::run()
   if(!m_runner->isRunning()) {
     m_runner->start();
   }
+
+  m_udpServer->startAccepting(*m_clusterStatistics,
+                              m_clusterStatistics->getThisNode());
+  m_tcpAcceptor->startAccepting();
 
   messages::Message announcementRequestMsg =
     m_udpServer->buildMessage(*m_config);
@@ -169,9 +159,13 @@ Communicator::exit()
     auto [nodeMap, lock] = m_clusterStatistics->getNodeMap();
     for(auto& it : nodeMap) {
       auto& node = it.second;
+      if(node.getId() == m_config->getId())
+        continue;
+
       NetworkedNode* nn = node.getNetworkedNode();
       assert(nn);
       nn->offlineAnnouncement(*m_config, *nn, "Shutdown");
+      nn->resetConnection();
     }
   }
 

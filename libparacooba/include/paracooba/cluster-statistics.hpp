@@ -38,10 +38,7 @@ class ClusterStatistics : public ClusterNodeStore
   void initLocalNode();
 
   void setStatelessMessageTransmitter(
-    messages::MessageTransmitter& statelessMessageTransmitter)
-  {
-    m_statelessMessageTransmitter = &statelessMessageTransmitter;
-  }
+    messages::MessageTransmitter& statelessMessageTransmitter);
 
   using HandledNodesSet = std::set<ClusterNode*>;
 
@@ -74,7 +71,11 @@ class ClusterStatistics : public ClusterNodeStore
 
   bool clearChanged();
 
-  ClusterNode& getThisNode() { return *m_thisNode; }
+  ClusterNode& getThisNode()
+  {
+    assert(m_statelessMessageTransmitter);
+    return *m_thisNode;
+  }
 
   void handlePathOnNode(int64_t originator,
                         ClusterNode& node,

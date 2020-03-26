@@ -24,6 +24,7 @@ class Control : public messages::MessageReceiver
   virtual void receiveMessage(const messages::Message& msg, NetworkedNode& nn);
 
   void announceTo(NetworkedNode& nn);
+  void requestAnnouncementFrom(NetworkedNode &nn);
 
   private:
   void handleOnlineAnnouncement(const messages::Message& msg,

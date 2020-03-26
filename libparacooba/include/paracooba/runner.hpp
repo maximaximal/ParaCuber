@@ -45,9 +45,9 @@ class Runner
   void stop();
 
   /** @brief Reports if the runner is already running. */
-  inline bool isRunning() { return m_running; }
+  inline bool isRunning() const { return m_running; }
 
-  inline uint64_t getWorkQueueSize() { return m_taskQueue->size(); }
+  inline uint64_t getWorkQueueSize() const { return m_taskQueue->size(); }
 
   /** @brief Push a new task to the internal task queue.
    *

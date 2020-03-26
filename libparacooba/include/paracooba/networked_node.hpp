@@ -76,7 +76,9 @@ class NetworkedNode
   bool deletionRequested() { return m_deletionRequested; }
   void requestDeletion() { m_deletionRequested = true; }
 
+  bool isConnectionReady() const;
   bool assignConnection(const net::Connection& conn);
+  void resetConnection();
   ConnectionReadyWaiter& getConnectionReadyWaiter()
   {
     return m_connectionReadyWaiter;

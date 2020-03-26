@@ -12,6 +12,7 @@
 
 namespace paracooba {
 class ClusterNodeStore;
+class ClusterNode;
 
 namespace messages {
 class MessageReceiver;
@@ -39,6 +40,7 @@ class TCPAcceptor : boost::asio::coroutine
       ClusterNodeStore& clusterNodeStore,
       messages::MessageReceiver& msgReceiver,
       messages::JobDescriptionReceiverProvider& jdReceiverProvider);
+    ~State();
 
     boost::asio::io_service& ioService;
     boost::asio::ip::tcp::acceptor acceptor;
@@ -64,6 +66,8 @@ class TCPAcceptor : boost::asio::coroutine
 
   /** @brief Accept handler that is called when new connections arrive. */
   void operator()(const boost::system::error_code& ec);
+
+  void initiateConnectionToClusterNode(ClusterNode& clusterNode);
 
   private:
   std::shared_ptr<State> m_state;

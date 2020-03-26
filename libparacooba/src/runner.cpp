@@ -121,6 +121,7 @@ Runner::worker(uint32_t workerId)
 {
   std::string threadName = "Worker" + std::to_string(workerId);
   m_log->initLocalThread(threadName);
+
   auto logger = m_log->createLogger("Worker", std::to_string(workerId));
   PARACOOBA_LOG(logger, Trace) << "Worker " << workerId << " started.";
   while(m_running) {

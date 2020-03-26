@@ -26,7 +26,6 @@ void
 ClusterStatistics::initLocalNode()
 {
   assert(m_statelessMessageTransmitter);
-
   ClusterNode thisNode(m_changed,
                        m_config->getInt64(Config::Id),
                        m_config->getInt64(Config::Id),
@@ -45,6 +44,13 @@ ClusterStatistics::initLocalNode()
   thisNode.setUdpListenPort(m_config->getUint16(Config::UDPListenPort));
   thisNode.setName(m_config->getString(Config::LocalName));
   m_thisNode = &addNode(std::move(thisNode));
+}
+
+void
+ClusterStatistics::setStatelessMessageTransmitter(
+  messages::MessageTransmitter& statelessMessageTransmitter)
+{
+  m_statelessMessageTransmitter = &statelessMessageTransmitter;
 }
 
 const ClusterNode&

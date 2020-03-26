@@ -116,17 +116,15 @@ void
 ClusterNode::applyOnlineAnnouncementMessage(
   const messages::OnlineAnnouncement& onlineAnnouncement)
 {
-  applyMessageNode(onlineAnnouncement.getNode());
-
   PARACOOBA_CLUSTERNODE_CHANGED(m_initializedByPeer, false)
+  applyMessageNode(onlineAnnouncement.getNode());
 }
 void
 ClusterNode::applyAnnouncementRequestMessage(
   const messages::AnnouncementRequest& announcementRequest)
 {
-  applyMessageNode(announcementRequest.getRequester());
-
   PARACOOBA_CLUSTERNODE_CHANGED(m_initializedByPeer, true)
+  applyMessageNode(announcementRequest.getRequester());
 }
 void
 ClusterNode::applyNodeStatusMessage(const messages::NodeStatus& nodeStatus)

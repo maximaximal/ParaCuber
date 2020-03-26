@@ -51,6 +51,7 @@ Connection::State::~State()
     << "Connection Ended with resume mode " << resumeMode;
   if(remoteNN) {
     remoteNN->removeActiveTCPClient();
+    remoteNN->resetConnection();
   }
 
   switch(resumeMode) {
@@ -65,6 +66,13 @@ Connection::State::~State()
                         jobDescriptionReceiverProvider,
                         connectionTry);
         conn.connect(*remoteNN);
+
+        // Also apply all old queue entries to send.
+        while(!sendQueue.empty()) {
+          auto entry = sendQueue.front();
+          sendQueue.pop();
+          conn.sendSendQueueEntry(std::move(entry));
+        }
       } else {
         PARACOOBA_LOG(logger, NetTrace)
           << "Cannot restart connection, as no remoteNN is set!";
@@ -72,25 +80,41 @@ Connection::State::~State()
       break;
     }
     case EndAfterShutdown:
+      // Entries could not be sent, so notify callbacks.
+      while(!sendQueue.empty()) {
+        auto entry = sendQueue.front();
+        sendQueue.pop();
+        entry.sendFinishedCB(false);
+      }
       break;
   }
 }
 
 Connection::SendQueueEntry::SendQueueEntry() {}
-Connection::SendQueueEntry::SendQueueEntry(const SendQueueEntry& o)
+Connection::SendQueueEntry::SendQueueEntry(const SendQueueEntry& o,
+                                           SuccessCB sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(*o.sendItem))
+  , sendFinishedCB(sendFinishedCB)
 {}
-Connection::SendQueueEntry::SendQueueEntry(std::shared_ptr<CNF> cnf)
+Connection::SendQueueEntry::SendQueueEntry(std::shared_ptr<CNF> cnf,
+                                           SuccessCB sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(cnf))
+  , sendFinishedCB(sendFinishedCB)
 {}
-Connection::SendQueueEntry::SendQueueEntry(const messages::Message& msg)
+Connection::SendQueueEntry::SendQueueEntry(const messages::Message& msg,
+                                           SuccessCB sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(msg))
+  , sendFinishedCB(sendFinishedCB)
 {}
-Connection::SendQueueEntry::SendQueueEntry(const messages::JobDescription& jd)
+Connection::SendQueueEntry::SendQueueEntry(const messages::JobDescription& jd,
+                                           SuccessCB sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(jd))
+  , sendFinishedCB(sendFinishedCB)
 {}
-Connection::SendQueueEntry::SendQueueEntry(EndTokenTag endTokenTag)
+Connection::SendQueueEntry::SendQueueEntry(EndTokenTag endTokenTag,
+                                           SuccessCB sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(endTokenTag))
+  , sendFinishedCB(sendFinishedCB)
 {}
 Connection::SendQueueEntry::~SendQueueEntry() {}
 
@@ -125,19 +149,20 @@ Connection::~Connection()
 }
 
 void
-Connection::sendCNF(std::shared_ptr<CNF> cnf)
+Connection::sendCNF(std::shared_ptr<CNF> cnf, SuccessCB sendFinishedCB)
 {
-  sendSendQueueEntry(SendQueueEntry(cnf));
+  sendSendQueueEntry(SendQueueEntry(cnf, sendFinishedCB));
 }
 void
-Connection::sendMessage(const messages::Message& msg)
+Connection::sendMessage(const messages::Message& msg, SuccessCB sendFinishedCB)
 {
-  sendSendQueueEntry(SendQueueEntry(msg));
+  sendSendQueueEntry(SendQueueEntry(msg, sendFinishedCB));
 }
 void
-Connection::sendJobDescription(const messages::JobDescription& jd)
+Connection::sendJobDescription(const messages::JobDescription& jd,
+                               SuccessCB sendFinishedCB)
 {
-  sendSendQueueEntry(SendQueueEntry(jd));
+  sendSendQueueEntry(SendQueueEntry(jd, sendFinishedCB));
 }
 void
 Connection::sendEndToken()
@@ -168,8 +193,6 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
                       *this,
                       std::placeholders::_1,
                       std::placeholders::_2);
-
-  enrichLogger();
 
   if(remoteNN() && remoteNN()->deletionRequested()) {
     return;
@@ -263,8 +286,6 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
   messages::Message* msg;
   bool repeat;
 
-  enrichLogger();
-
   if(!ec) {
     reenter(&writeCoro())
     {
@@ -319,6 +340,7 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
           yield async_write(socket(), sendStreambuf(), wh);
         }
         currentlySending() = false;
+        currentSendFinishedCB()(true);
         currentSendItem().reset();
       }
     }
@@ -326,6 +348,10 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
     // Error during writing!
     PARACOOBA_LOG(logger(), NetTrace)
       << "Error during sending! Error: " << ec.message();
+    currentSendFinishedCB()(false);
+    if(remoteNN()) {
+      remoteNN()->resetConnection();
+    }
   }
 }
 
@@ -340,6 +366,7 @@ Connection::connect(NetworkedNode& nn)
   // connection.
   resumeMode() = RestartAfterShutdown;
   remoteNN() = &nn;
+  remoteId() = nn.getId();
 
   uint16_t allowedRetries = config()->getUint16(Config::ConnectionRetries);
 
@@ -455,6 +482,10 @@ Connection::receiveSerializedMessage(size_t bytes_received)
       messages::Message msg;
       ia(msg);
       messageReceiver().receiveMessage(msg, *remoteNN());
+
+      if(msg.getType() == messages::Type::OfflineAnnouncement) {
+        resumeMode() = EndAfterShutdown;
+      }
     }
   } catch(const cereal::Exception& e) {
     PARACOOBA_LOG(logger(), GlobalError)
@@ -464,21 +495,27 @@ Connection::receiveSerializedMessage(size_t bytes_received)
   }
 }
 
+Logger&
+Connection::logger()
+{
+  enrichLogger();
+  return m_state->logger;
+}
+
 void
 Connection::enrichLogger()
 {
-  if(m_state->log->isLogLevelEnabled(Log::NetTrace)) {
-    std::stringstream context;
-    context << "{";
+  if(!m_state->log->isLogLevelEnabled(Log::NetTrace))
+    return;
 
-    context << "R:'" << remoteId() << "',";
-    context << "TX:'" << sendMode() << "',";
-    context << "RX:'" << currentMode() << "'";
+  std::stringstream context;
+  context << "{";
+  context << "R:'" << std::to_string(getRemoteId()) << "',";
+  context << "TX:'" << sendMode() << "',";
+  context << "RX:'" << currentMode() << "'";
+  context << "}";
 
-    context << "}";
-
-    logger() = m_state->log->createLogger(ConnectionLoggerName, context.str());
-  }
+  m_state->logger.setMeta(context.str());
 }
 
 void
@@ -488,7 +525,9 @@ Connection::popNextSendItem()
   std::lock_guard lock(sendQueueMutex());
   if(sendQueue().empty())
     return;
-  currentSendItem() = std::move(sendQueue().front().sendItem);
+  auto& queueFrontEntry = sendQueue().front();
+  currentSendItem() = std::move(queueFrontEntry.sendItem);
+  currentSendFinishedCB() = queueFrontEntry.sendFinishedCB;
   sendQueue().pop();
   writeHandler();
 }

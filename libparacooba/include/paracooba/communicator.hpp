@@ -82,6 +82,7 @@ class Communicator : public std::enable_shared_from_this<Communicator>
    * objects.
    */
   inline RunnerPtr getRunner() { return m_runner; }
+  inline const RunnerPtr getRunner() const { return m_runner; }
   inline boost::asio::io_service& getIOService() { return m_ioService; }
   inline ClusterStatisticsPtr getClusterStatistics()
   {
@@ -109,12 +110,10 @@ class Communicator : public std::enable_shared_from_this<Communicator>
   std::unique_ptr<boost::asio::signal_set> m_signalSet;
   RunnerPtr m_runner;
 
+  ClusterStatisticsPtr m_clusterStatistics;
   std::unique_ptr<net::Control> m_control;
-
   std::unique_ptr<net::UDPServer> m_udpServer;
   std::unique_ptr<net::TCPAcceptor> m_tcpAcceptor;
-
-  ClusterStatisticsPtr m_clusterStatistics;
 
   int64_t m_currentMessageId = INT64_MIN;
 

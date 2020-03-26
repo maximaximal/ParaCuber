@@ -34,6 +34,10 @@ class MessageTransmitter
                            const std::string& reason,
                            SuccessCB sendFinishedCB = EmptySuccessCB);
 
+  void announcementRequest(const Config& cfg,
+                           NetworkedNode& nn,
+                           SuccessCB sendFinishedCB = EmptySuccessCB);
+
   messages::Message buildMessage(const Config& config);
 };
 }
