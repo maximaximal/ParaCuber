@@ -136,7 +136,8 @@ Communicator::run()
   // structures have been initialised. Also, use a warmup time of 2 seconds -
   // the first 5 seconds do not need this, because other work has to be done.
   m_tickTimer.expires_from_now(std::chrono::seconds(2));
-  m_tickTimer.async_wait(std::bind(&Communicator::tick, this));
+  m_tickTimer.async_wait(
+    std::bind(&Communicator::tick, this, std::placeholders::_1));
 
   PARACOOBA_LOG(m_logger, Trace) << "Communicator io_service started.";
   bool ioServiceRunningWithoutException = true;
@@ -179,7 +180,11 @@ Communicator::exit()
   // this is called from a runner thread.
   m_runner->m_running = false;
 
-  m_ioService.post([this]() {
+  PARACOOBA_LOG(m_logger, Trace)
+    << "Shutting down after waiting for last messages to be sent (100ms).";
+  m_tickTimer.cancel();
+  m_tickTimer.expires_from_now(std::chrono::milliseconds(100));
+  m_tickTimer.async_wait([this](const boost::system::error_code& ec) {
     if(m_webserverInitiator) {
       m_webserverInitiator->stop();
       m_webserverInitiator.reset();
@@ -362,8 +367,11 @@ Communicator::requestCNFTreePathInfo(
 }
 
 void
-Communicator::tick()
+Communicator::tick(const boost::system::error_code& ec)
 {
+  if(ec == boost::asio::error::operation_aborted)
+    return;
+
   assert(m_runner);
   assert(m_udpServer);
   assert(m_clusterStatistics);
@@ -424,6 +432,7 @@ Communicator::tick()
 
   m_tickTimer.expires_from_now(
     std::chrono::milliseconds(m_config->getUint64(Config::TickMilliseconds)));
-  m_tickTimer.async_wait(std::bind(&Communicator::tick, this));
+  m_tickTimer.async_wait(
+    std::bind(&Communicator::tick, this, std::placeholders::_1));
 }
 }

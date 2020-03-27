@@ -74,7 +74,7 @@ class NetworkedNode
   void removeActiveTCPClient() { --m_activeTCPClients; }
   bool hasActiveTCPClients() { return m_activeTCPClients > 0; }
   bool deletionRequested() { return m_deletionRequested; }
-  void requestDeletion() { m_deletionRequested = true; }
+  void requestDeletion();
 
   bool isConnectionReady() const;
   bool assignConnection(const net::Connection& conn);

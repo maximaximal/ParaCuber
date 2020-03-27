@@ -302,6 +302,11 @@ ClusterStatistics::tick()
       unsafeRemoveNode(it.first, message);
       return;
     }
+
+    NetworkedNode* nn = statNode.getNetworkedNode();
+    if(nn->deletionRequested()) {
+      unsafeRemoveNode(statNode.getId(), "Deletion was requested.");
+    }
   }
 }
 }

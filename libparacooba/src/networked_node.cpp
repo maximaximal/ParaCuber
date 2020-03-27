@@ -38,6 +38,16 @@ NetworkedNode::transmitJobDescription(messages::JobDescription&& jd,
   m_connection->sendJobDescription(jd, sendFinishedCB);
 }
 
+void
+NetworkedNode::requestDeletion()
+{
+  m_deletionRequested = true;
+  if(m_connection) {
+    m_connection->exit();
+    resetConnection();
+  }
+}
+
 bool
 NetworkedNode::isConnectionReady() const
 {

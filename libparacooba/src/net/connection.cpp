@@ -47,13 +47,14 @@ Connection::State::State(boost::asio::io_service& ioService,
 
 Connection::State::~State()
 {
+  if(remoteNN) {
+    remoteNN->removeActiveTCPClient();
+    remoteNN->resetConnection();
+  }
+
   if(!exit && !config->isStopping()) {
     PARACOOBA_LOG(logger, NetTrace)
       << "Connection Ended with resume mode " << resumeMode;
-    if(remoteNN) {
-      remoteNN->removeActiveTCPClient();
-      remoteNN->resetConnection();
-    }
 
     switch(resumeMode) {
       case RestartAfterShutdown: {

@@ -132,7 +132,7 @@ class Communicator : public std::enable_shared_from_this<Communicator>
    * The main task of ticks is to send out statistics updates to all other
    * connected nodes.
    */
-  void tick();
+  void tick(const boost::system::error_code& ec);
   boost::asio::high_resolution_timer m_tickTimer;
 
   std::unique_ptr<webserver::Initiator> m_webserverInitiator;
