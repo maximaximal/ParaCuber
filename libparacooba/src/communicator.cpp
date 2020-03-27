@@ -8,10 +8,10 @@
 
 #include "../include/paracooba/messages/message.hpp"
 #include "../include/paracooba/messages/node.hpp"
+#include "../include/paracooba/net/connection.hpp"
 #include "../include/paracooba/net/control.hpp"
 #include "../include/paracooba/net/tcp_acceptor.hpp"
 #include "../include/paracooba/net/udp_server.hpp"
-#include "../include/paracooba/net/connection.hpp"
 #include "paracooba/messages/announcement_request.hpp"
 #include "paracooba/messages/cnftree_node_status_reply.hpp"
 #include "paracooba/messages/cnftree_node_status_request.hpp"
@@ -150,7 +150,6 @@ Communicator::run()
     }
   }
   // Run last milliseconds to try to send offline announcements.
-  m_ioService.run_for(std::chrono::milliseconds(10));
   PARACOOBA_LOG(m_logger, Trace) << "Communicator io_service ended.";
   m_runner->stop();
 }
@@ -159,6 +158,8 @@ void
 Communicator::exit()
 {
   if(m_runner->m_running) {
+    m_config->setStopping(true);
+
     auto [nodeMap, lock] = m_clusterStatistics->getNodeMap();
     for(auto& it : nodeMap) {
       auto& node = it.second;

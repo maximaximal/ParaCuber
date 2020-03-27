@@ -156,6 +156,8 @@ class Config
   inline void setInfoMode(bool v) { m_infoMode = v; }
   /** @brief Set daemon mode active. */
   inline void setDaemonMode(bool v) { m_daemonMode = v; }
+  /** @brief Set stopping mode, so no other restarts are carried out. */
+  inline void setStopping(bool v) { m_stopping = v; }
 
   /** @brief Check if STDOUT should be used for logging instead of CLOG. */
   inline bool useSTDOUTForLogging() const { return m_useSTDOUTForLogging; }
@@ -168,6 +170,8 @@ class Config
   }
   /** @brief Check if limited tree dump is set. */
   inline bool isLimitedTreeDumpActive() const { return m_limitedTreeDump; }
+  /** @brief Check if this Paracooba instance is currently shutting down. */
+  inline bool isStopping() const { return m_stopping; }
 
   int64_t generateId(int64_t uniqueNumber);
 
@@ -232,6 +236,7 @@ class Config
   bool m_enableClientCaDiCaL = false;
   bool m_useSTDOUTForLogging = false;
   bool m_limitedTreeDump = true;
+  bool m_stopping = false;
 #ifdef ENABLE_INTERNAL_WEBSERVER
   bool m_enableInternalWebserver = true;
 #else

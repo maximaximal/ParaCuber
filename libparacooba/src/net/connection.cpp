@@ -47,46 +47,48 @@ Connection::State::State(boost::asio::io_service& ioService,
 
 Connection::State::~State()
 {
-  PARACOOBA_LOG(logger, NetTrace)
-    << "Connection Ended with resume mode " << resumeMode;
-  if(remoteNN) {
-    remoteNN->removeActiveTCPClient();
-    remoteNN->resetConnection();
-  }
+  if(!exit && !config->isStopping()) {
+    PARACOOBA_LOG(logger, NetTrace)
+      << "Connection Ended with resume mode " << resumeMode;
+    if(remoteNN) {
+      remoteNN->removeActiveTCPClient();
+      remoteNN->resetConnection();
+    }
 
-  switch(resumeMode) {
-    case RestartAfterShutdown: {
-      // Attempt restart.
-      if(remoteNN) {
-        Connection conn(ioService,
-                        log,
-                        config,
-                        clusterNodeStore,
-                        messageReceiver,
-                        jobDescriptionReceiverProvider,
-                        connectionTry);
-        conn.connect(*remoteNN);
+    switch(resumeMode) {
+      case RestartAfterShutdown: {
+        // Attempt restart.
+        if(remoteNN) {
+          Connection conn(ioService,
+                          log,
+                          config,
+                          clusterNodeStore,
+                          messageReceiver,
+                          jobDescriptionReceiverProvider,
+                          connectionTry);
+          conn.connect(*remoteNN);
 
-        // Also apply all old queue entries to send.
+          // Also apply all old queue entries to send.
+          while(!sendQueue.empty()) {
+            auto entry = sendQueue.front();
+            sendQueue.pop();
+            conn.sendSendQueueEntry(std::move(entry));
+          }
+        } else {
+          PARACOOBA_LOG(logger, NetTrace)
+            << "Cannot restart connection, as no remoteNN is set!";
+        }
+        break;
+      }
+      case EndAfterShutdown:
+        // Entries could not be sent, so notify callbacks.
         while(!sendQueue.empty()) {
           auto entry = sendQueue.front();
           sendQueue.pop();
-          conn.sendSendQueueEntry(std::move(entry));
+          entry.sendFinishedCB(false);
         }
-      } else {
-        PARACOOBA_LOG(logger, NetTrace)
-          << "Cannot restart connection, as no remoteNN is set!";
-      }
-      break;
+        break;
     }
-    case EndAfterShutdown:
-      // Entries could not be sent, so notify callbacks.
-      while(!sendQueue.empty()) {
-        auto entry = sendQueue.front();
-        sendQueue.pop();
-        entry.sendFinishedCB(false);
-      }
-      break;
   }
 }
 
@@ -139,12 +141,14 @@ Connection::Connection(const Connection& conn)
 
 Connection::~Connection()
 {
-  if(sendMode() != TransmitEndToken && m_state.use_count() == 1) {
-    // This is the last connection, so this is also the last one having a
-    // reference to the state. This is a clean shutdown of a connection, the
-    // socket will be ended. To differentiate between this clean shutdown and a
-    // dirty one, an EndToken must be transmitted. This is the last action.
-    Connection(*this).sendEndToken();
+  if(!isExit() && !config()->isStopping()) {
+    if(sendMode() != TransmitEndToken && m_state.use_count() == 1) {
+      // This is the last connection, so this is also the last one having a
+      // reference to the state. This is a clean shutdown of a connection, the
+      // socket will be ended. To differentiate between this clean shutdown and
+      // a dirty one, an EndToken must be transmitted. This is the last action.
+      Connection(*this).sendEndToken();
+    }
   }
 }
 

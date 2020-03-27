@@ -112,6 +112,7 @@ class Connection
     int64_t thisId = 0;
     uint64_t size = 0;
     uint64_t sendSize = 0;
+    bool exit = false;
 
     Mode currentMode = TransmitModeUnknown;
     Mode sendMode = TransmitModeUnknown;
@@ -170,6 +171,8 @@ class Connection
 
   Mode getRecvMode() const { return m_state->currentMode; }
   Mode getSendMode() const { return m_state->sendMode; }
+
+  void exit() { isExit() = true; }
 
   private:
   void writeHandler(boost::system::error_code ec = boost::system::error_code(),
@@ -233,6 +236,7 @@ class Connection
   bool getLocalCNF();
   void receiveIntoCNF(size_t bytes_received);
   void receiveSerializedMessage(size_t bytes_received);
+  bool& isExit() { return m_state->exit; }
 
   void popNextSendItem();
   bool initRemoteNN();

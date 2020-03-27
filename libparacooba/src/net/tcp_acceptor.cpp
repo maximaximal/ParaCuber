@@ -4,6 +4,7 @@
 #include "../../include/paracooba/net/connection.hpp"
 #include "../../include/paracooba/networked_node.hpp"
 #include <boost/system/error_code.hpp>
+#include <pthread.h>
 
 namespace paracooba {
 namespace net {
@@ -27,6 +28,10 @@ TCPAcceptor::State::State(
 
 TCPAcceptor::State::~State()
 {
+  if(newConnection) {
+    newConnection->exit();
+  }
+
   PARACOOBA_LOG(logger, Trace)
     << "TCPAcceptor at " << acceptor.local_endpoint() << ":"
     << " stopped.";
