@@ -18,9 +18,7 @@ class ClusterNode;
 class ClusterNodeStore;
 
 namespace net {
-class UDPServer
-  : public messages::MessageTransmitter
-  , boost::asio::coroutine
+class UDPServer : public messages::MessageTransmitter
 {
   public:
   struct State
@@ -44,6 +42,7 @@ class UDPServer
     ClusterNodeStore* clusterNodeStore = nullptr;
     ClusterNode* thisNode = nullptr;
     std::mutex sendMutex;
+    boost::asio::coroutine readCoro;
   };
 
   UDPServer(boost::asio::io_service& ioService,
@@ -88,6 +87,7 @@ class UDPServer
   }
   boost::asio::streambuf& recvStreambuf() { return m_state->recvStreambuf; }
   boost::asio::streambuf& sendStreambuf() { return m_state->sendStreambuf; }
+  boost::asio::coroutine& readCoro() { return m_state->readCoro; }
   Logger& logger() { return m_state->logger; }
   messages::MessageReceiver& messageReceiver()
   {

@@ -72,16 +72,18 @@ TCPAcceptor::operator()(const boost::system::error_code& ec)
   if(!ec) {
     reenter(this)
     {
-      if(!newConnection())
-        makeNewConnection();
+      for(;;) {
+        if(!newConnection())
+          makeNewConnection();
 
-      yield acceptor().async_accept(newConnection()->socket(), *this);
+        yield acceptor().async_accept(newConnection()->socket(), *this);
 
-      newConnection()->socket().non_blocking(true);
+        newConnection()->socket().non_blocking(true);
 
-      newConnection()->readHandler();
+        newConnection()->readHandler();
 
-      newConnection().reset();
+        newConnection().reset();
+      }
     }
   } else {
     PARACOOBA_LOG(logger(), LocalError)

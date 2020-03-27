@@ -79,6 +79,7 @@ class NetworkedNode
   bool isConnectionReady() const;
   bool assignConnection(const net::Connection& conn);
   void resetConnection();
+  net::Connection* getConnection() { return m_connection.get(); }
   ConnectionReadyWaiter& getConnectionReadyWaiter()
   {
     return m_connectionReadyWaiter;

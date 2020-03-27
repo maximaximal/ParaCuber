@@ -338,6 +338,17 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
             << "Transmitting size " << sendSize();
 
           yield async_write(socket(), sendStreambuf(), wh);
+
+          if((msg = std::get_if<messages::Message>(currentSendItem().get()))) {
+            if(msg->getType() == messages::Type::OfflineAnnouncement) {
+              PARACOOBA_LOG(logger(), NetTrace)
+                << "This was an offline announcement, connection ends.";
+              if(remoteNN()) {
+                remoteNN()->resetConnection();
+              }
+              yield break;
+            }
+          }
         }
         currentlySending() = false;
         currentSendFinishedCB()(true);

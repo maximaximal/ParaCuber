@@ -11,6 +11,7 @@
 #include "../include/paracooba/net/control.hpp"
 #include "../include/paracooba/net/tcp_acceptor.hpp"
 #include "../include/paracooba/net/udp_server.hpp"
+#include "../include/paracooba/net/connection.hpp"
 #include "paracooba/messages/announcement_request.hpp"
 #include "paracooba/messages/cnftree_node_status_reply.hpp"
 #include "paracooba/messages/cnftree_node_status_request.hpp"
@@ -148,6 +149,8 @@ Communicator::run()
         << "Exception encountered from ioService! Message: " << e.what();
     }
   }
+  // Run last milliseconds to try to send offline announcements.
+  m_ioService.run_for(std::chrono::milliseconds(10));
   PARACOOBA_LOG(m_logger, Trace) << "Communicator io_service ended.";
   m_runner->stop();
 }
@@ -164,8 +167,10 @@ Communicator::exit()
 
       NetworkedNode* nn = node.getNetworkedNode();
       assert(nn);
+      if(nn->getConnectionReadyWaiter().isReady()) {
+        nn->getConnection()->sendEndToken();
+      }
       nn->offlineAnnouncement(*m_config, *nn, "Shutdown");
-      nn->resetConnection();
     }
   }
 

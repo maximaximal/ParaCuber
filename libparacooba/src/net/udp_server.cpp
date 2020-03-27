@@ -81,41 +81,44 @@ UDPServer::operator()(const boost::system::error_code& ec,
   enrichLogger();
 
   if(!ec || ec == boost::asio::error::message_size) {
-    reenter(this)
+    reenter(readCoro())
     {
-      yield socket().async_receive_from(
-        recvStreambuf().prepare(REC_BUF_SIZE), remoteEndpoint(), *this);
+      for(;;) {
+        yield socket().async_receive_from(
+          recvStreambuf().prepare(REC_BUF_SIZE), remoteEndpoint(), *this);
 
-      PARACOOBA_LOG(logger(), NetTrace)
-        << "Receive message of " << bytes_received << " bytes from "
-        << remoteEndpoint() << ". Trying to decode.";
+        PARACOOBA_LOG(logger(), NetTrace)
+          << "Receive message of " << bytes_received << " bytes from "
+          << remoteEndpoint() << ". Trying to decode.";
 
-      try {
-        messages::Message msg;
-        recvStreambuf().commit(bytes_received);
-        std::istream recvIstream(&recvStreambuf());
-        cereal::BinaryInputArchive iarchive(recvIstream);
-        iarchive(msg);
+        try {
+          messages::Message msg;
+          recvStreambuf().commit(bytes_received);
+          std::istream recvIstream(&recvStreambuf());
+          cereal::BinaryInputArchive iarchive(recvIstream);
+          iarchive(msg);
 
-        auto [node, inserted] =
-          clusterNodeStore().getOrCreateNode(msg.getOrigin());
-        NetworkedNode* nn = node.getNetworkedNode();
-        nn->setRemoteUdpEndpoint(remoteEndpoint());
+          auto [node, inserted] =
+            clusterNodeStore().getOrCreateNode(msg.getOrigin());
+          NetworkedNode* nn = node.getNetworkedNode();
+          nn->setRemoteUdpEndpoint(remoteEndpoint());
 
-        messageReceiver().receiveMessage(msg, *nn);
-      } catch(cereal::Exception& e) {
-        PARACOOBA_LOG(logger(), GlobalError)
-          << "Received invalid message, parsing threw serialisation "
-             "exception! "
-             "Message: "
-          << e.what();
+          messageReceiver().receiveMessage(msg, *nn);
+        } catch(cereal::Exception& e) {
+          PARACOOBA_LOG(logger(), GlobalError)
+            << "Received invalid message, parsing threw serialisation "
+               "exception! "
+               "Message: "
+            << e.what();
+        }
+
+        recvStreambuf().consume(recvStreambuf().size() + 1);
       }
-
-      yield accept();
     }
   } else {
     PARACOOBA_LOG(logger(), LocalError)
       << "Error receiving data from UDP socket. Error: " << ec.message();
+    readCoro() = boost::asio::coroutine();
     accept();
   }
 }
