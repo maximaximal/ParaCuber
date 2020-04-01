@@ -19,7 +19,7 @@ class ClusterNode;
 using ClusterNodeMap = std::map<ID, ClusterNode>;
 
 using SuccessCB = std::function<void(bool)>;
-static SuccessCB EmptySuccessCB = [](bool) {};
+static SuccessCB EmptySuccessCB = nullptr;
 }
 
 #endif

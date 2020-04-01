@@ -177,7 +177,9 @@ UDPServer::transmitMessageToEndpoint(const messages::Message& msg,
     success = false;
   }
   sendStreambuf().consume(sendStreambuf().size() + 1);
-  sendFinishedCB(success);
+  if(sendFinishedCB) {
+    sendFinishedCB(success);
+  }
 }
 void
 UDPServer::enrichLogger()

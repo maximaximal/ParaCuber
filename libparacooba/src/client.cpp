@@ -7,6 +7,7 @@
 #include "../include/paracooba/daemon.hpp"
 #include "../include/paracooba/net/connection.hpp"
 #include "../include/paracooba/networked_node.hpp"
+#include "../include/paracooba/readywaiter.hpp"
 #include "../include/paracooba/runner.hpp"
 #include "../include/paracooba/task_factory.hpp"
 
@@ -28,9 +29,29 @@ Client::Client(ConfigPtr config, LogPtr log, CommunicatorPtr communicator)
   // from this client.
   m_communicator->getClusterStatistics()->getNodeFullyKnownSignal().connect(
     [this](const ClusterNode& node) {
+      PARACOOBA_LOG(m_logger, Trace)
+        << "Node " << node.getId()
+        << " fully known event received, transfer CNF.";
       NetworkedNode* nn = node.getNetworkedNode();
       assert(nn);
-      nn->getConnectionReadyWaiter();
+
+      nn->getConnectionReadyWaiter().callWhenReady(
+        [this, &node, nn](net::Connection& conn) {
+          conn.sendCNF(m_rootCNF, [this, &node, &conn, nn](bool success) {
+            PARACOOBA_LOG(m_logger, Trace)
+              << "Sent root CNF to " << node.getId() << " with "
+              << (success ? "success" : "error");
+
+            if(success) {
+              // Now, send the allowance map to fully initiate the remote
+              // compute node and begin working on tasks.
+              m_rootCNF->sendAllowanceMap(*nn, [this, &node]() {
+                PARACOOBA_LOG(m_logger, Trace)
+                  << "Sent allowance map to " << node.getId() << ".";
+              });
+            }
+          });
+        });
     });
 }
 Client::~Client()

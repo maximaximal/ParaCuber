@@ -123,13 +123,13 @@ CNF::getSizeToBeSent()
 }
 
 void
-CNF::sendAllowanceMap(int64_t id, SendFinishedCB finishedCallback)
+CNF::sendAllowanceMap(NetworkedNode& nn, SendFinishedCB finishedCallback)
 {
   // First, wait for the allowance map to be ready.
-  rootTaskReady.callWhenReady([this, id, finishedCallback](CaDiCaLTask& ptr) {
+  rootTaskReady.callWhenReady([this, &nn, finishedCallback](CaDiCaLTask& ptr) {
     // Registry is only initialised after the root task arrived.
     getCuberRegistry().allowanceMapWaiter.callWhenReady(
-      [this, id, finishedCallback](cuber::Registry::AllowanceMap& map) {
+      [this, &nn, finishedCallback](cuber::Registry::AllowanceMap& map) {
         // This indirection is required to make this work from worker threads.
         // The allowance map may take a while to generate.
         messages::JobDescription jd(m_originId);
@@ -150,13 +150,14 @@ CNF::sendAllowanceMap(int64_t id, SendFinishedCB finishedCallback)
           }
         }
 
-        m_clusterNodeStore.transmitJobDescription(
-          std::move(jd), id, [this, id, finishedCallback](bool success) {
+        nn.transmitJobDescription(
+          std::move(jd), nn, [this, &nn, finishedCallback](bool success) {
             if(success) {
               finishedCallback();
             } else {
               PARACOOBA_LOG(m_logger, GlobalError)
-                << "Could not send JobInitiator to " << id << "! VERY BAD!";
+                << "Could not send JobInitiator to " << nn.getId()
+                << "! VERY BAD!";
             }
           });
       });

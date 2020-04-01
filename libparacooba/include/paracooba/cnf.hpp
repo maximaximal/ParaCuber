@@ -102,7 +102,7 @@ class CNF
             bool first = true);
   uint64_t getSizeToBeSent();
 
-  void sendAllowanceMap(int64_t id, SendFinishedCB finishedCB);
+  void sendAllowanceMap(NetworkedNode &nn, SendFinishedCB finishedCB);
 
   void sendPath(int64_t id,
                 const TaskSkeleton& skel,

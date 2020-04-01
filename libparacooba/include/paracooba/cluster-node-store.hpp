@@ -36,6 +36,9 @@ class ClusterNodeStore : public messages::JobDescriptionTransmitter
   }
 
   virtual void transmitJobDescription(messages::JobDescription&& jd,
+                                      NetworkedNode& nn,
+                                      SuccessCB sendFinishedCB);
+  virtual void transmitJobDescription(messages::JobDescription&& jd,
                                       ID id,
                                       SuccessCB sendFinishedCB);
 

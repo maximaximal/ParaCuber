@@ -86,36 +86,39 @@ Connection::State::~State()
         while(!sendQueue.empty()) {
           auto entry = sendQueue.front();
           sendQueue.pop();
-          entry.sendFinishedCB(false);
+          if(entry.sendFinishedCB) {
+            entry.sendFinishedCB(false);
+          }
         }
         break;
     }
   }
 }
 
-Connection::SendQueueEntry::SendQueueEntry() {}
-Connection::SendQueueEntry::SendQueueEntry(const SendQueueEntry& o,
-                                           SuccessCB sendFinishedCB)
+Connection::SendQueueEntry::SendQueueEntry()
+  : sendFinishedCB(EmptySuccessCB)
+{}
+Connection::SendQueueEntry::SendQueueEntry(const SendQueueEntry& o)
   : sendItem(std::make_unique<SendItem>(*o.sendItem))
-  , sendFinishedCB(sendFinishedCB)
+  , sendFinishedCB(o.sendFinishedCB)
 {}
 Connection::SendQueueEntry::SendQueueEntry(std::shared_ptr<CNF> cnf,
-                                           SuccessCB sendFinishedCB)
+                                           const SuccessCB& sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(cnf))
   , sendFinishedCB(sendFinishedCB)
 {}
 Connection::SendQueueEntry::SendQueueEntry(const messages::Message& msg,
-                                           SuccessCB sendFinishedCB)
+                                           const SuccessCB& sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(msg))
   , sendFinishedCB(sendFinishedCB)
 {}
 Connection::SendQueueEntry::SendQueueEntry(const messages::JobDescription& jd,
-                                           SuccessCB sendFinishedCB)
+                                           const SuccessCB& sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(jd))
   , sendFinishedCB(sendFinishedCB)
 {}
 Connection::SendQueueEntry::SendQueueEntry(EndTokenTag endTokenTag,
-                                           SuccessCB sendFinishedCB)
+                                           const SuccessCB& sendFinishedCB)
   : sendItem(std::make_unique<SendItem>(endTokenTag))
   , sendFinishedCB(sendFinishedCB)
 {}
@@ -154,18 +157,19 @@ Connection::~Connection()
 }
 
 void
-Connection::sendCNF(std::shared_ptr<CNF> cnf, SuccessCB sendFinishedCB)
+Connection::sendCNF(std::shared_ptr<CNF> cnf, const SuccessCB& sendFinishedCB)
 {
   sendSendQueueEntry(SendQueueEntry(cnf, sendFinishedCB));
 }
 void
-Connection::sendMessage(const messages::Message& msg, SuccessCB sendFinishedCB)
+Connection::sendMessage(const messages::Message& msg,
+                        const SuccessCB& sendFinishedCB)
 {
   sendSendQueueEntry(SendQueueEntry(msg, sendFinishedCB));
 }
 void
 Connection::sendJobDescription(const messages::JobDescription& jd,
-                               SuccessCB sendFinishedCB)
+                               const SuccessCB& sendFinishedCB)
 {
   sendSendQueueEntry(SendQueueEntry(jd, sendFinishedCB));
 }
@@ -315,6 +319,10 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
           sendSize() = (*cnf)->getSizeToBeSent();
           yield async_write(socket(), BUF(sendSize), wh);
 
+          PARACOOBA_LOG(logger(), NetTrace)
+            << "Now sending CNF with size " << BytePrettyPrint(sendSize())
+            << ".";
+
           // Let sending of potentially huge CNF be handled by the CNF class
           // internally.
           yield(*cnf)->send(&socket(),
@@ -340,7 +348,8 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
           yield async_write(socket(), BUF(sendSize), wh);
 
           PARACOOBA_LOG(logger(), NetTrace)
-            << "Transmitting size " << sendSize();
+            << "Now sending message with size " << BytePrettyPrint(sendSize())
+            << ".";
 
           yield async_write(socket(), sendStreambuf(), wh);
 
@@ -355,16 +364,21 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
             }
           }
         }
-        currentlySending() = false;
-        currentSendFinishedCB()(true);
+
+        if(currentSendFinishedCB()) {
+          currentSendFinishedCB()(true);
+        }
         currentSendItem().reset();
+        currentlySending() = false;
       }
     }
   } else {
     // Error during writing!
     PARACOOBA_LOG(logger(), NetTrace)
       << "Error during sending! Error: " << ec.message();
-    currentSendFinishedCB()(false);
+    if(currentSendFinishedCB()) {
+      currentSendFinishedCB()(false);
+    }
     if(remoteNN()) {
       remoteNN()->resetConnection();
     }
@@ -526,9 +540,7 @@ Connection::enrichLogger()
 
   std::stringstream context;
   context << "{";
-  context << "R:'" << std::to_string(getRemoteId()) << "',";
-  context << "TX:'" << sendMode() << "',";
-  context << "RX:'" << currentMode() << "'";
+  context << "R:'" << std::to_string(getRemoteId()) << "'";
   context << "}";
 
   m_state->logger.setMeta(context.str());
@@ -543,7 +555,7 @@ Connection::popNextSendItem()
     return;
   auto& queueFrontEntry = sendQueue().front();
   currentSendItem() = std::move(queueFrontEntry.sendItem);
-  currentSendFinishedCB() = queueFrontEntry.sendFinishedCB;
+  m_state->currentSendFinishedCB.swap(queueFrontEntry.sendFinishedCB);
   sendQueue().pop();
   writeHandler();
 }

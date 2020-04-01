@@ -186,11 +186,19 @@ TEST_CASE("Initiate a paracooba::net::Connection")
   REQUIRE(msgReceiver1.messages.top().getNodeStatus().getWorkQueueSize() ==
           nodeStatusMsg2.getWorkQueueSize());
 
+  bool finished = false;
+  auto TransferFinishedCB = [&finished](bool success) {
+    REQUIRE(success);
+    finished = true;
+  };
+
   for(size_t i = 0; i < 5; ++i) {
-    conn2.sendMessage(msg2);
+    conn2.sendMessage(msg2, TransferFinishedCB);
   }
 
   ioService.run_for(std::chrono::milliseconds(2));
+
+  REQUIRE(finished);
 
   REQUIRE(msgReceiver1.messages.size() == 6);
 

@@ -67,20 +67,19 @@ class Connection
   struct SendQueueEntry
   {
     SendQueueEntry();
-    SendQueueEntry(const SendQueueEntry& o,
-                   SuccessCB sendFinishedCB = EmptySuccessCB);
+    SendQueueEntry(const SendQueueEntry& o);
     SendQueueEntry(std::shared_ptr<CNF> cnf,
-                   SuccessCB sendFinishedCB = EmptySuccessCB);
+                   const SuccessCB& sendFinishedCB = EmptySuccessCB);
     SendQueueEntry(const messages::Message& msg,
-                   SuccessCB sendFinishedCB = EmptySuccessCB);
+                   const SuccessCB& sendFinishedCB = EmptySuccessCB);
     SendQueueEntry(const messages::JobDescription& jd,
-                   SuccessCB sendFinishedCB = EmptySuccessCB);
+                   const SuccessCB& sendFinishedCB = EmptySuccessCB);
     SendQueueEntry(EndTokenTag endTokenTag,
-                   SuccessCB sendFinishedCB = EmptySuccessCB);
+                   const SuccessCB& sendFinishedCB = EmptySuccessCB);
     ~SendQueueEntry();
 
     std::unique_ptr<SendItem> sendItem;
-    SuccessCB sendFinishedCB = EmptySuccessCB;
+    SuccessCB sendFinishedCB;
   };
 
   struct State
@@ -146,11 +145,11 @@ class Connection
   virtual ~Connection();
 
   void sendCNF(std::shared_ptr<CNF> cnf,
-               SuccessCB sendFinishedCB = EmptySuccessCB);
+               const SuccessCB& sendFinishedCB = EmptySuccessCB);
   void sendMessage(const messages::Message& msg,
-                   SuccessCB sendFinishedCB = EmptySuccessCB);
+                   const SuccessCB& sendFinishedCB = EmptySuccessCB);
   void sendJobDescription(const messages::JobDescription& jd,
-                          SuccessCB sendFinishedCB = EmptySuccessCB);
+                          const SuccessCB& sendFinishedCB = EmptySuccessCB);
   void sendEndToken();
   void sendSendQueueEntry(SendQueueEntry&& e);
 

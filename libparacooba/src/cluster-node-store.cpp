@@ -7,6 +7,14 @@
 namespace paracooba {
 void
 ClusterNodeStore::transmitJobDescription(messages::JobDescription&& jd,
+                                         NetworkedNode& nn,
+                                         SuccessCB sendFinishedCB)
+{
+  nn.transmitJobDescription(std::move(jd), nn, sendFinishedCB);
+}
+
+void
+ClusterNodeStore::transmitJobDescription(messages::JobDescription&& jd,
                                          ID id,
                                          SuccessCB sendFinishedCB)
 {
@@ -14,6 +22,9 @@ ClusterNodeStore::transmitJobDescription(messages::JobDescription&& jd,
   NetworkedNode* nn = node.getNetworkedNode();
   assert(nn);
 
-  nn->getConnectionReadyWaiter();
+  const auto &readyWaiter = nn->getConnectionReadyWaiter();
+  assert(readyWaiter.isReady());
+
+  nn->transmitJobDescription(std::move(jd), *nn, sendFinishedCB);
 }
 }
