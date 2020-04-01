@@ -85,11 +85,17 @@ Client::solve()
     switch(result->state) {
       case CNFTree::SAT:
         m_status = TaskResult::Satisfiable;
+
+        if(!result->decodedAssignment)
+          result->decodeAssignment();
+
         assert(result->decodedAssignment);
         m_satAssignment = result->decodedAssignment;
         PARACOOBA_LOG(m_logger, Trace)
           << "Satisfying assignment available with "
-          << result->decodedAssignment->size() << " literals.";
+          << result->decodedAssignment->size() << " literals ("
+          << BytePrettyPrint(result->decodedAssignment->size() *
+                             sizeof(Literal)) << " in memory)";
         break;
       case CNFTree::UNSAT:
         m_status = TaskResult::Unsatisfiable;

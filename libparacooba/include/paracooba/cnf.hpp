@@ -68,6 +68,10 @@ class CNF
 
   struct Result
   {
+    Result() {}
+    Result(const Result& o);
+    Result(Result&& o);
+
     Path p;
     CNFTree::State state;
     uint32_t size = 0;

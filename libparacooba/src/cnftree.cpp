@@ -183,6 +183,8 @@ CNFTree::propagateUpwardsFrom(Path p, Path sourcePath)
     p = getParent(p);
   }
 
+  p = cleanupPath(p);
+
   Node* node = getNode(p);
   if(!node) {
     assert(getDepth(p) < maxPathDepth);
@@ -197,16 +199,16 @@ CNFTree::propagateUpwardsFrom(Path p, Path sourcePath)
   const Node* leftChild = getNode(getNextLeftPath(p));
   const Node* rightChild = getNode(getNextRightPath(p));
 
-  if(leftChild && rightChild) {
-    if(leftChild->state == UNSAT && rightChild->state == UNSAT) {
-      node->state = UNSAT;
-      changed = true;
-    }
+  if(leftChild && leftChild->state == UNSAT && rightChild &&
+     rightChild->state == UNSAT) {
+    node->state = UNSAT;
+    changed = true;
+  }
 
-    if(leftChild->state == SAT || rightChild->state == SAT) {
-      node->state = SAT;
-      changed = true;
-    }
+  if((leftChild && leftChild->state == SAT) ||
+     (rightChild && rightChild->state == SAT)) {
+    node->state = SAT;
+    changed = true;
   }
 
   if(changed) {
@@ -217,10 +219,10 @@ CNFTree::propagateUpwardsFrom(Path p, Path sourcePath)
         << " when applying path " << pathToStdString(sourcePath);
     }
 
-    setCNFResult(cleanupPath(p), node->state, sourcePath);
+    setCNFResult(p, node->state, sourcePath);
 
     if(getDepth(p) == 0) {
-      m_rootStateChangedSignal(cleanupPath(p), node->state);
+      m_rootStateChangedSignal(p, node->state);
       return;
     }
 
@@ -253,6 +255,8 @@ CNFTree::pathToStrNoAlloc(Path p)
 {
   if(p == DefaultUninitiatedPath)
     return "(nowhere)";
+  if(p == 0)
+    return "(root)";
   if(getDepth(p) > maxPathDepth)
     return "INVALID PATH";
   static thread_local char arr[maxPathDepth];
@@ -326,10 +330,7 @@ CNFTree::dumpNode(Path p,
 void
 CNFTree::setCNFResult(Path p, State state, Path source)
 {
-  std::shared_ptr<CNF> rootCNF = GetRootCNF(m_config.get(), m_originCNFId);
-  if(!rootCNF)
-    return;
-  rootCNF->insertResult(cleanupPath(p), state, cleanupPath(source));
+  m_rootCNF.insertResult(cleanupPath(p), state, cleanupPath(source));
 }
 
 Path

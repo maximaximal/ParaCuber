@@ -213,6 +213,8 @@ CaDiCaLTask::execute()
     status = TaskResult::Parsed;
   }
 
+  m_internalVarCount = m_solver->vars();
+
   if(m_mode & Mode::Solve) {
     PARACOOBA_LOG((*m_logger), Trace)
       << "Start solving CNF formula using CaDiCaL CNF solver.";

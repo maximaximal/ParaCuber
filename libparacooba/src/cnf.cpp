@@ -388,11 +388,6 @@ CNF::connectToCNFTreeSignal()
       Result* result = &m_results[0];
       assert(result);
 
-      if(result->state == CNFTree::SAT) {
-        // The result must contain the assignment if it is satisfiable.
-        result->decodeAssignment();
-      }
-
       m_resultSignal(result);
     });
 }
@@ -423,38 +418,47 @@ CNF::readyToBeStarted() const
 void
 CNF::solverFinishedSlot(const TaskResult& result, Path p)
 {
-  Result res;
-  res.p = p;
+  Result* res = [this, p]() {
+    std::unique_lock lock(m_resultsMutex);
+    return &(*m_results
+                .insert(std::make_pair(CNFTree::cleanupPath(p), Result()))
+                .first)
+              .second;
+  }();
+  res->p = p;
 
   {
     auto& resultMut = const_cast<TaskResult&>(result);
     auto task = static_unique_pointer_cast<CaDiCaLTask>(
       std::move(resultMut.getTaskPtr()));
-    res.task = std::move(task);
+    res->task = std::move(task);
   }
 
-  if(!res.task)
+  if(!res->task)
     return;
 
-  res.size = res.task->getVarCount();
+  res->size = res->task->getVarCount();
+
+  assert(res->size > 0);
 
   switch(result.getStatus()) {
     case TaskResult::Satisfiable: {
-      res.state = CNFTree::SAT;
+      res->state = CNFTree::SAT;
 
       // Satisfiable results must be directly wrapped in the result array, as
       // the solver instances are shared between solver tasks.
       std::unique_lock loggerLock(m_loggerMutex);
+      res->encodeAssignment();
       PARACOOBA_LOG(m_logger, Trace)
-        << "Encode Assignment because SAT encountered!";
-      res.encodeAssignment();
+        << "Encoded Assignment because SAT encountered! Encoded size: "
+        << BytePrettyPrint(res->encodedAssignment->size());
       break;
     }
     case TaskResult::Unsatisfiable:
-      res.state = CNFTree::UNSAT;
+      res->state = CNFTree::UNSAT;
       break;
     case TaskResult::Unsolved:
-      res.state = CNFTree::Unknown;
+      res->state = CNFTree::Unknown;
       break;
     default: {
       // Other results are not handled here.
@@ -466,17 +470,17 @@ CNF::solverFinishedSlot(const TaskResult& result, Path p)
   }
 
   // Give back the solver handle from the result after it was fully processed.
-  res.task->releaseSolver();
+  res->task->releaseSolver();
 
-  if(res.state == CNFTree::SAT || res.state == CNFTree::UNSAT ||
-     res.state == CNFTree::Unknown) {
-    if(res.state != CNFTree::Unknown) {
-      {
-        std::unique_lock lock(m_resultsMutex);
-        m_results.insert(
-          std::make_pair(CNFTree::cleanupPath(p), std::move(res)));
-      }
-      m_cnfTree->setStateFromLocal(p, res.state);
+  CNFTree::State state = res->state;
+
+  assert(state != CNFTree::SAT ||
+         (state == CNFTree::SAT && res->encodedAssignment));
+
+  if(state == CNFTree::SAT || state == CNFTree::UNSAT ||
+     state == CNFTree::Unknown) {
+    if(state != CNFTree::Unknown) {
+      m_cnfTree->setStateFromLocal(p, state);
     }
   }
 }
@@ -635,17 +639,12 @@ CNF::insertResult(Path p, CNFTree::State state, Path source)
         << "Insert result " << state << " for path "
         << CNFTree::pathToStdString(p) << " from source path "
         << CNFTree::pathToStdString(source);
-      return &m_results.insert(std::make_pair(p, Result{ 0 })).first->second;
+      return &m_results.insert(std::make_pair(p, Result())).first->second;
     }
   }();
 
   res->p = p;
   res->state = state;
-
-  // Assign the path directly to 0 to make referencing it easier, if this is the
-  // root path.
-  if(CNFTree::getDepth(p) == 0)
-    p = 0;
 
   if(source != CNFTree::DefaultUninitiatedPath) {
     source = CNFTree::cleanupPath(source);
@@ -660,12 +659,39 @@ CNF::insertResult(Path p, CNFTree::State state, Path source)
       return;
     }
     const Result& oldResult = resultIt->second;
+    assert(oldResult.state != CNFTree::SAT ||
+           (oldResult.state == CNFTree::SAT && oldResult.encodedAssignment &&
+            oldResult.size > 0));
+
     res->task = oldResult.task;
     res->size = oldResult.size;
     res->encodedAssignment = oldResult.encodedAssignment;
     res->decodedAssignment = oldResult.decodedAssignment;
+
+    assert(
+      res->state != CNFTree::SAT ||
+      (res->state == CNFTree::SAT && res->encodedAssignment && res->size > 0));
   }
 }
+
+CNF::Result::Result(const Result& o)
+  : p(o.p)
+  , state(o.state)
+  , size(o.size)
+  , finished(o.finished)
+  , encodedAssignment(o.encodedAssignment)
+  , decodedAssignment(o.decodedAssignment)
+  , task(o.task)
+{}
+CNF::Result::Result(Result&& o)
+  : p(o.p)
+  , state(o.state)
+  , size(o.size)
+  , finished(o.finished)
+  , encodedAssignment(o.encodedAssignment)
+  , decodedAssignment(o.decodedAssignment)
+  , task(o.task)
+{}
 
 void
 CNF::Result::encodeAssignment()
@@ -682,6 +708,8 @@ CNF::Result::encodeAssignment()
     // Write directly from solver.
     task->writeEncodedAssignment(*encodedAssignment);
   }
+
+  assert(size > 0);
 }
 
 void
@@ -691,6 +719,8 @@ CNF::Result::decodeAssignment()
     return;
   assert(encodedAssignment || task);
   decodedAssignment = std::make_shared<AssignmentVector>();
+
+  assert(size != 0);
 
   if(encodedAssignment) {
     // Use the already encoded assignment to generate decoded one.
