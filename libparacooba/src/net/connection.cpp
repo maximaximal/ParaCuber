@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <boost/asio/buffer.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/placeholders.hpp>
+#include <chrono>
 #include <functional>
 #include <mutex>
 
@@ -34,6 +36,8 @@ Connection::State::State(boost::asio::io_service& ioService,
                          uint16_t retries)
   : ioService(ioService)
   , socket(ioService)
+  , resolver(ioService)
+  , steadyTimer(ioService)
   , log(log)
   , logger(log->createLogger(ConnectionLoggerName))
   , config(config)
@@ -59,7 +63,7 @@ Connection::State::~State()
     switch(resumeMode) {
       case RestartAfterShutdown: {
         // Attempt restart.
-        if(remoteNN) {
+        if(remoteNN || remote != "") {
           Connection conn(ioService,
                           log,
                           config,
@@ -67,7 +71,12 @@ Connection::State::~State()
                           messageReceiver,
                           jobDescriptionReceiverProvider,
                           connectionTry);
-          conn.connect(*remoteNN);
+
+          if(remoteNN) {
+            conn.connect(*remoteNN);
+          } else {
+            conn.connect(remote);
+          }
 
           // Also apply all old queue entries to send.
           while(!sendQueue.empty()) {
@@ -77,7 +86,8 @@ Connection::State::~State()
           }
         } else {
           PARACOOBA_LOG(logger, NetTrace)
-            << "Cannot restart connection, as no remoteNN is set!";
+            << "Cannot restart connection, as no remoteNN is set and no remote "
+               "address was specified!";
         }
         break;
       }
@@ -210,13 +220,31 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
   if(!ec) {
     reenter(&readCoro())
     {
-      yield async_write(socket(), BUF(thisId), rh);
+      if(socket().available() >= sizeof(thisId())) {
+        read(socket(), BUF(remoteId));
+        yield async_write(socket(), BUF(thisId), rh);
+        currentlySending() = false;
+        writeHandler();
+      } else {
+        yield async_write(socket(), BUF(thisId), rh);
+        currentlySending() = false;
+        writeHandler();
+        yield async_read(socket(), BUF(remoteId), rh);
+      }
 
-      currentlySending() = false;
-      // Write pending items from queue.
-      writeHandler();
+      if(remoteId() == thisId()) {
+        PARACOOBA_LOG(logger(), NetTrace)
+          << "Connection from same local ID, not accepting.";
+        resumeMode() = EndAfterShutdown;
+        yield break;
+      }
 
-      yield async_read(socket(), BUF(remoteId), rh);
+      if(remoteId() == 0) {
+        PARACOOBA_LOG(logger(), NetTrace)
+          << "Remote ID is 0! Ending connection.";
+        resumeMode() = EndAfterShutdown;
+        yield break;
+      }
 
       if(!initRemoteNN()) {
         // Exit coroutine and connection. This connection is already established
@@ -226,6 +254,7 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
              "will be dropped.";
         yield break;
       }
+
       connectionEstablished() = true;
       remoteNN()->addActiveTCPClient();
 
@@ -276,8 +305,17 @@ Connection::readHandler(boost::system::error_code ec, size_t bytes_received)
     // (closed client session)
 
     if(resumeMode() == RestartAfterShutdown) {
-      connect(*remoteNN());
+      PARACOOBA_LOG(logger(), NetTrace)
+        << "Connection ended! Retry after timeout." << ec.message();
+      reconnectAfterMS(config()->getUint32(Config::NetworkTimeout));
     }
+  } else if(ec == boost::asio::error::connection_refused) {
+    PARACOOBA_LOG(logger(), NetTrace)
+      << "Connection refused! Retry after short timeout." << ec.message();
+    reconnectAfterMS(config()->getUint32(Config::ShortNetworkTimeout));
+  } else {
+    PARACOOBA_LOG(logger(), NetTrace)
+      << "Error in readHandler: " << ec.message();
   }
 }
 
@@ -348,8 +386,8 @@ Connection::writeHandler(boost::system::error_code ec, size_t bytes_transferred)
           yield async_write(socket(), BUF(sendSize), wh);
 
           PARACOOBA_LOG(logger(), NetTrace)
-            << "Now sending message with size " << BytePrettyPrint(sendSize())
-            << ".";
+            << "Now sending message of type " << sendMode() << " with size "
+            << BytePrettyPrint(sendSize()) << ".";
 
           yield async_write(socket(), sendStreambuf(), wh);
 
@@ -414,6 +452,71 @@ Connection::connect(NetworkedNode& nn)
     PARACOOBA_LOG(logger(), NetTrace)
       << "Retries exhausted, no reconnect will be tried.";
     resumeMode() = EndAfterShutdown;
+  }
+}
+
+void
+Connection::connect(const std::string& remote)
+{
+  resumeMode() = EndAfterShutdown;
+  this->remote() = remote;
+
+  std::string host = remote;
+  std::string port = std::to_string(config()->getUint16(Config::UDPTargetPort));
+
+  auto posOfColon = remote.find(":");
+  if(posOfColon != std::string::npos) {
+    host = remote.substr(0, posOfColon);
+    port = remote.substr(posOfColon + 1, std::string::npos);
+  }
+
+  uint16_t allowedRetries = config()->getUint16(Config::ConnectionRetries);
+  ++connectionTry();
+
+  if(getConnectionTries() < allowedRetries) {
+    PARACOOBA_LOG(logger(), NetTrace)
+      << "Trying to resolve " << remote << " (\"" << host << "\":\"" << port
+      << "\"), Try " << connectionTry();
+
+    Connection thisConn(*this);
+
+    resolver().async_resolve(
+      boost::asio::ip::tcp::resolver::query{ host, port },
+      [*this, host, port, remote](
+        const boost::system::error_code& ec,
+        boost::asio::ip::tcp::resolver::iterator endpointIt) mutable {
+        if(ec) {
+          PARACOOBA_LOG(logger(), NetTrace)
+            << "Could not resolve " << remote << " (\"" << host << "\":\""
+            << port << "\")! Error: " << ec.message();
+          return;
+        }
+
+        boost::asio::ip::tcp::endpoint chosenEndpoint;
+        std::for_each(endpointIt,
+                      {},
+                      [*this, &chosenEndpoint, &host, &port, &remote](
+                        auto& endpointEntry) mutable {
+                        auto endpoint = endpointEntry.endpoint();
+                        PARACOOBA_LOG(logger(), NetTrace)
+                          << "Resolved " << remote << " (\"" << host << "\":\""
+                          << port << "\") to endpoint " << endpoint
+                          << " on try " << connectionTry();
+                        chosenEndpoint = endpoint;
+                      });
+
+        PARACOOBA_LOG(logger(), NetTrace)
+          << "Resolved " << remote << " (\"" << host << "\":\"" << port
+          << "\") to endpoint " << chosenEndpoint << " on try "
+          << connectionTry()
+          << " which was chosen for connection. Now connecting.";
+
+        socket().async_connect(chosenEndpoint,
+                               boost::bind(&Connection::readHandler,
+                                           *this,
+                                           boost::asio::placeholders::error,
+                                           0));
+      });
   }
 }
 
@@ -487,8 +590,8 @@ Connection::receiveSerializedMessage(size_t bytes_received)
         receiver->receiveJobDescription(remoteId(), std::move(jd), *remoteNN());
 
         if(context()) {
-          // This is a connection between a Master and a Daemon. So the context
-          // for this formula can be notified of this JD.
+          // This is a connection between a Master and a Daemon. So the
+          // context for this formula can be notified of this JD.
           switch(jd.getKind()) {
             case messages::JobDescription::Initiator:
               context()->start(Daemon::Context::State::AllowanceMapReceived);
@@ -540,7 +643,18 @@ Connection::enrichLogger()
 
   std::stringstream context;
   context << "{";
-  context << "R:'" << std::to_string(getRemoteId()) << "'";
+  context << "RID:'" << std::to_string(getRemoteId()) << "'";
+
+  if(remote() != "") {
+    context << ",R:'" << remote() << "'";
+  } else if(socket().is_open()) {
+    context << ",R:'" << socket().remote_endpoint() << "'";
+  }
+
+  if(socket().is_open()) {
+    context << ",L:'" << socket().local_endpoint() << "'";
+  }
+
   context << "}";
 
   m_state->logger.setMeta(context.str());
@@ -564,26 +678,55 @@ bool
 Connection::initRemoteNN()
 {
   if(remoteNN()) {
-    // If the remote was already set from outside, this can return immediately.
-    // No new node needs to be created.
+    // If the remote was already set from outside, this can return
+    // immediately. No new node needs to be created.
     remoteNN()->assignConnection(*this);
     return true;
   }
 
   auto [node, inserted] = clusterNodeStore().getOrCreateNode(remoteId());
-  remoteNN() = node.getNetworkedNode();
 
-  enrichLogger();
-  if(remoteNN()->assignConnection(*this)) {
+  if(node.getNetworkedNode()->assignConnection(*this)) {
+    remoteNN() = node.getNetworkedNode();
+
     PARACOOBA_LOG(logger(), NetTrace)
       << "Initiated Remote NN, connection established.";
+
+    if(inserted) {
+      if(remote() != "") {
+        // The side with specified remote is the one that originally started the
+        // connection. This makes it also the side that now sends an
+        // announcement request.
+        remoteNN()->announcementRequest(*config(), *remoteNN());
+      }
+    }
     return true;
   } else {
-    PARACOOBA_LOG(logger(), NetTrace)
-      << "Initiated Remote NN, but connection not required, as it was already "
-         "initialized previously. Connection is dropped.";
     return false;
   }
+}
+
+void
+Connection::reconnect()
+{
+  socket().close();
+
+  if(remoteNN()) {
+    connect(*remoteNN());
+  } else if(remote() != "") {
+    connect(remote());
+  } else {
+    PARACOOBA_LOG(logger(), NetTrace)
+      << "Reconnect cancelled, as there is no remote defined.";
+  }
+}
+
+void
+Connection::reconnectAfterMS(uint32_t milliseconds)
+{
+  steadyTimer().expires_from_now(std::chrono::milliseconds(milliseconds));
+  steadyTimer().async_wait(
+    [*this](const boost::system::error_code& ec) mutable { reconnect(); });
 }
 
 std::ostream&

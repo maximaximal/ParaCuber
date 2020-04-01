@@ -76,8 +76,6 @@ Control::handleOnlineAnnouncement(const messages::Message& msg,
 
   auto [clusterNode, inserted] = m_clusterNodeStore.getOrCreateNode(id);
 
-  bool wasFullyKnown = clusterNode.getFullyKnown();
-
   clusterNode.applyOnlineAnnouncementMessage(onlineAnnouncement);
 }
 void

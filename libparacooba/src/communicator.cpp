@@ -132,6 +132,25 @@ Communicator::run()
       std::bind(&webserver::Initiator::run, m_webserverInitiator.get()));
   }
 
+  // Handle known remotes after startup.
+  const Config::StringVector& knownRemotes =
+    m_config->getStringVector(Config::KnownRemotes);
+  if(knownRemotes.size() > 0) {
+    m_ioService.post([this, &knownRemotes]() {
+      PARACOOBA_LOG(m_logger, Debug) << "Connecting to known remote hosts, "
+                                        "because known remotes were specified.";
+      for(const std::string& remote : knownRemotes) {
+        net::Connection connection(m_ioService,
+                                   m_log,
+                                   m_config,
+                                   *m_clusterStatistics,
+                                   *m_control,
+                                   getJobDescriptionReceiverProvider());
+        connection.connect(remote);
+      }
+    });
+  }
+
   // The timer can only be enabled at this stage, after all other required data
   // structures have been initialised. Also, use a warmup time of 2 seconds -
   // the first 5 seconds do not need this, because other work has to be done.
@@ -142,8 +161,8 @@ Communicator::run()
   PARACOOBA_LOG(m_logger, Trace) << "Communicator io_service started.";
   bool ioServiceRunningWithoutException = true;
   while(ioServiceRunningWithoutException) {
-    try {
       m_ioService.run();
+    try {
       ioServiceRunningWithoutException = false;
     } catch(const std::exception& e) {
       PARACOOBA_LOG(m_logger, LocalError)

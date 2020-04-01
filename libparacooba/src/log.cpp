@@ -113,14 +113,14 @@ Log::Log(ConfigPtr config)
           (expr::stream
            << "[" << paracooba_logger_timestamp << "] ["
            << paracooba_logger_localname << "] ["
+           << expr::attr<Log::Severity, Log::Severity_Tag>("Severity") << "] ["
            << paracooba_logger_thread_name << "] "
            << expr::if_(expr::has_attr<std::string>(
                 "ContextMeta"))[expr::stream
                                 << "[" << paracooba_logger_context << "<"
                                 << paracooba_logger_context_meta << ">]"]
                 .else_[expr::stream << "[" << paracooba_logger_context << "]"]
-           << " [" << expr::attr<Log::Severity, Log::Severity_Tag>("Severity")
-           << "] " << expr::smessage));
+           << " " << expr::smessage));
       boost::log::core::get()->add_sink(m_consoleSink);
       LogSinksSetup = true;
     }
@@ -134,23 +134,23 @@ Log::~Log() {}
 
 template<typename LoggerType>
 static LoggerType
-createGenericLogger(const std::string& context, const std::string& meta)
+createGenericLogger(const std::string& context)
 {
   auto lg = LoggerType();
   auto contextConstant = boost::log::attributes::make_constant(context);
   lg.add_attribute("Context", contextConstant);
-  if(meta != "")
-    lg.add_attribute("ContextMeta",
-                     boost::log::attributes::make_constant(meta));
-
   return std::move(lg);
 }
 
 template<typename Logger>
 static Log::Handle<Logger>
-createGenericLoggerHandle(Logger&& logger, Log& log)
+createGenericLoggerHandle(Logger&& logger, Log& log, const std::string& meta)
 {
-  return Log::Handle<Logger>{ logger, log };
+  auto handle = Log::Handle<Logger>{ logger, log };
+  if(meta != "") {
+    handle.setMeta(meta);
+  }
+  return std::move(handle);
 }
 
 Logger
@@ -158,16 +158,18 @@ Log::createLogger(const std::string& context, const std::string& meta)
 {
   return createGenericLoggerHandle(
     createGenericLogger<boost::log::sources::severity_logger<Log::Severity>>(
-      context, meta),
-    *this);
+      context),
+    *this,
+    meta);
 }
 LoggerMT
 Log::createLoggerMT(const std::string& context, const std::string& meta)
 {
   return createGenericLoggerHandle(
     createGenericLogger<boost::log::sources::severity_logger_mt<Log::Severity>>(
-      context, meta),
-    *this);
+      context),
+    *this,
+    meta);
 }
 
 std::string_view

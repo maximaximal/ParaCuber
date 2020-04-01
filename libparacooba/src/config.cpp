@@ -3,6 +3,7 @@
 #include "../include/paracooba/communicator.hpp"
 #include "../include/paracooba/messages/node.hpp"
 #include "../include/paracooba/runner.hpp"
+#include <boost/algorithm/string/join.hpp>
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/exception/diagnostic_information.hpp>
@@ -36,6 +37,8 @@ Config::Config()
     set(LocalName, m_generatedLocalName);
   }
 
+  set(KnownRemotes, StringVector());
+
   /* CONFIG FILES ONLY OPTIONS
    * --------------------------------------- */
 
@@ -54,9 +57,18 @@ Config::Config()
          po::value<std::string>()->default_value(m_generatedLocalName)->value_name("string"), "local name of this solver node")
     (GetConfigNameFromEnum(Config::InputFile),
          po::value<std::string>()->default_value("")->value_name("string"), "input file (problem) to parse")
+    ((std::string(GetConfigNameFromEnum(Config::KnownRemotes)) + (",remote")).c_str(),
+     po::value<StringVector>()->value_name("string")->multitoken(),
+         "known remote to directly connect to (may contain local IP) (multiple entries possible)")
     (GetConfigNameFromEnum(Config::ThreadCount),
          po::value<uint32_t>()->default_value(threadCount)->value_name("int"),
          "number of worker threads to execute tasks on")
+    (GetConfigNameFromEnum(Config::NetworkTimeout),
+         po::value<uint32_t>()->default_value(10000)->value_name("int"),
+         "network timeout in milliseconds, applied after network errors")
+    (GetConfigNameFromEnum(Config::ShortNetworkTimeout),
+         po::value<uint32_t>()->default_value(1000)->value_name("int"),
+         "short network timeout in milliseconds, e.g. used for reconnects")
     (GetConfigNameFromEnum(Config::UDPListenPort),
          po::value<uint16_t>()->default_value(18001)->value_name("int"),
          "udp port for incoming control messages")
@@ -73,7 +85,7 @@ Config::Config()
          po::value<uint16_t>()->default_value(18080)->value_name("int"),
          "port for internal webserver")
     (GetConfigNameFromEnum(Config::ConnectionRetries),
-         po::value<uint16_t>()->default_value(5)->value_name("int"),
+         po::value<uint16_t>()->default_value(30)->value_name("int"),
          "number of times connections are tried to be re-established after they were lost")
     (GetConfigNameFromEnum(Config::HTTPDocRoot),
          po::value<std::string>()->default_value(getInternalWebserverDefaultDocRoot())->value_name("string"),
@@ -197,6 +209,8 @@ Config::getKeyAsString(Key key)
       return std::to_string(std::get<float>(v));
     case 6:
       return std::get<std::string>(v);
+    case 7:
+      return boost::algorithm::join(std::get<StringVector>(v), ";");
     default:
       return "Unknown Type!";
   }
@@ -221,8 +235,14 @@ Config::processCommonParameters(const boost::program_options::variables_map& vm)
     vm, m_config.data(), Config::LocalName);
   conditionallySetConfigOptionToArray<std::string>(
     vm, m_config.data(), Config::InputFile);
+  conditionallySetConfigOptionToArray<StringVector>(
+    vm, m_config.data(), Config::KnownRemotes);
   conditionallySetConfigOptionToArray<uint32_t>(
     vm, m_config.data(), Config::ThreadCount);
+  conditionallySetConfigOptionToArray<uint32_t>(
+    vm, m_config.data(), Config::NetworkTimeout);
+  conditionallySetConfigOptionToArray<uint32_t>(
+    vm, m_config.data(), Config::ShortNetworkTimeout);
   conditionallySetConfigOptionToArray<uint16_t>(
     vm, m_config.data(), Config::UDPListenPort);
   conditionallySetConfigOptionToArray<uint16_t>(

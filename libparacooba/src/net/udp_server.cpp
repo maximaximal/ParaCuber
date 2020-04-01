@@ -131,7 +131,9 @@ UDPServer::transmitMessage(const messages::Message& msg,
                            SuccessCB successCB)
 {
   if(!nn.isUdpPortSet() || !nn.isUdpEndpointSet()) {
-    successCB(false);
+    if(successCB) {
+      successCB(false);
+    }
     return;
   }
   assert(nn.isUdpEndpointSet());

@@ -2,6 +2,7 @@
 #define PARACOOBA_NET_CONNECTION
 
 #include <atomic>
+#include <boost/asio/steady_timer.hpp>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -103,9 +104,12 @@ class Connection
     messages::JobDescriptionReceiverProvider& jobDescriptionReceiverProvider;
     NetworkedNode* remoteNN = nullptr;
     std::shared_ptr<CNF> cnf;
+    std::string remote;
 
     boost::asio::streambuf recvStreambuf = boost::asio::streambuf();
     boost::asio::streambuf sendStreambuf = boost::asio::streambuf();
+    boost::asio::ip::tcp::resolver resolver;
+    boost::asio::steady_timer steadyTimer;
     ContextPtr context = nullptr;
     int64_t remoteId = 0;
     int64_t thisId = 0;
@@ -159,6 +163,7 @@ class Connection
   boost::asio::ip::tcp::socket& socket() { return m_state->socket; }
 
   void connect(NetworkedNode& nn);
+  void connect(const std::string& remote);
 
   bool isConnectionEstablished() const
   {
@@ -177,8 +182,11 @@ class Connection
   void writeHandler(boost::system::error_code ec = boost::system::error_code(),
                     size_t n = 0);
 
+  boost::asio::io_service& ioService() { return m_state->ioService; }
   boost::asio::streambuf& recvStreambuf() { return m_state->recvStreambuf; }
   boost::asio::streambuf& sendStreambuf() { return m_state->sendStreambuf; }
+  boost::asio::ip::tcp::resolver& resolver() { return m_state->resolver; }
+  boost::asio::steady_timer& steadyTimer() { return m_state->steadyTimer; }
   Logger& logger();
   int64_t& thisId() { return m_state->thisId; }
   int64_t& remoteId() { return m_state->remoteId; }
@@ -224,6 +232,7 @@ class Connection
   std::atomic_bool& connectionEnding() { return m_state->connectionEnding; }
   std::atomic_bool& currentlySending() { return m_state->currentlySending; }
   std::atomic_uint16_t& connectionTry() { return m_state->connectionTry; }
+  std::string& remote() { return m_state->remote; }
 
   boost::asio::coroutine& readCoro() { return m_state->readCoro; }
   boost::asio::coroutine& writeCoro() { return m_state->writeCoro; }
@@ -236,9 +245,13 @@ class Connection
   void receiveIntoCNF(size_t bytes_received);
   void receiveSerializedMessage(size_t bytes_received);
   bool& isExit() { return m_state->exit; }
+  void sendNodeStatus();
 
   void popNextSendItem();
   bool initRemoteNN();
+  void reconnect();
+
+  void reconnectAfterMS(uint32_t milliseconds);
 
   void enrichLogger();
 };

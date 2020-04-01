@@ -43,8 +43,8 @@ main(int argc, char* argv[])
     client->solve();
   }
 
-  try {
     communicator->run();
+  try {
   } catch(std::exception& e) {
     PARACOOBA_LOG(logger, LocalError)
       << "Encountered exception which was not catched until main()! Message: "

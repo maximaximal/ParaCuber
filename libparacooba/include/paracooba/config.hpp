@@ -53,13 +53,25 @@ class Config
     DumpTreeAtExit,
     LimitedTreeDump,
     ConnectionRetries,
+    KnownRemotes,
+    NetworkTimeout,
+    ShortNetworkTimeout,
 
     FreqCuberCutoff,
 
     _KEY_COUNT
   };
-  using ConfigVariant = std::
-    variant<uint16_t, uint32_t, uint64_t, int32_t, int64_t, float, std::string>;
+
+  using StringVector = std::vector<std::string>;
+
+  using ConfigVariant = std::variant<uint16_t,
+                                     uint32_t,
+                                     uint64_t,
+                                     int32_t,
+                                     int64_t,
+                                     float,
+                                     std::string,
+                                     StringVector>;
 
   /** @brief Constructor
    */
@@ -124,6 +136,12 @@ class Config
   /** @brief Get a float configuration variable.
    */
   inline float getFloat(Key key) const { return get<float>(key); }
+  /** @brief Get a string vector configuration variable.
+   */
+  inline const StringVector& getStringVector(Key key) const
+  {
+    return get<StringVector>(key);
+  }
 
   /** @brief Get a configuration variable which can be cast in any way.
    */
@@ -300,6 +318,12 @@ GetConfigNameFromEnum(Config::Key key)
       return "limited-tree-dump";
     case Config::ConnectionRetries:
       return "connection-retries";
+    case Config::KnownRemotes:
+      return "known-remotes";
+    case Config::NetworkTimeout:
+      return "network-timeout";
+    case Config::ShortNetworkTimeout:
+      return "short-network-timeout";
     default:
       return "";
   }

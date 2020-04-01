@@ -68,25 +68,37 @@ class Log
     Handle(LoggerType logger, Log& log)
       : logger(logger)
       , log(&log)
+      , metaAttr("")
     {}
     Handle(const Handle& o)
       : logger(o.logger)
       , log(o.log)
+      , metaAttr(o.metaAttr)
     {}
     Handle& operator=(const Handle& o)
     {
       logger = o.logger;
       log = o.log;
+      metaAttr = o.metaAttr;
       return *this;
     }
     void setMeta(const std::string& meta)
     {
-      logger.add_attribute("ContextMeta",
-                           boost::log::attributes::make_constant(meta));
+      if(!metaAdded) {
+        logger.add_attribute("ContextMeta", metaAttr);
+        metaAdded = true;
+      }
+      metaAttr.set(meta);
     }
-    void resetMeta() { logger.remove_attribute("ContextMeta"); }
+    void resetMeta()
+    {
+      logger.remove_attribute("ContextMeta");
+      metaAdded = false;
+    }
     LoggerType logger;
     Log* log;
+    MutableConstant<std::string> metaAttr;
+    bool metaAdded = false;
   };
 
   using Logger = Handle<boost::log::sources::severity_logger<Log::Severity>>;
