@@ -31,10 +31,7 @@ class MsgReceiver : public MessageReceiver
 class JDReceiver : public JobDescriptionReceiver
 {
   public:
-  virtual void receiveJobDescription(int64_t sentFromID,
-                                     JobDescription&& jd,
-                                     NetworkedNode& nn)
-  {}
+  virtual void receiveJobDescription(JobDescription&& jd, NetworkedNode& nn) {}
 };
 
 class JDReceiverProvider : public JobDescriptionReceiverProvider

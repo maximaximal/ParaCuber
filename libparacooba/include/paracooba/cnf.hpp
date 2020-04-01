@@ -102,13 +102,13 @@ class CNF
             bool first = true);
   uint64_t getSizeToBeSent();
 
-  void sendAllowanceMap(NetworkedNode &nn, SendFinishedCB finishedCB);
+  void sendAllowanceMap(NetworkedNode& nn, SendFinishedCB finishedCB);
 
-  void sendPath(int64_t id,
+  void sendPath(NetworkedNode& nn,
                 const TaskSkeleton& skel,
                 SendFinishedCB finishedCB);
 
-  void sendResult(int64_t id, Path p, SendFinishedCB finishedCallback);
+  void sendResult(NetworkedNode& nn, Path p, SendFinishedCB finishedCallback);
 
   /** @brief Receive DIMACS file.
    *
@@ -118,8 +118,7 @@ class CNF
                const char* buf,
                std::size_t length);
 
-  virtual void receiveJobDescription(int64_t sentFromID,
-                                     messages::JobDescription&& jd,
+  virtual void receiveJobDescription(messages::JobDescription&& jd,
                                      NetworkedNode& nn);
 
   inline int64_t getOriginId() { return m_originId; }
@@ -142,7 +141,7 @@ class CNF
 
   void solverFinishedSlot(const TaskResult& result, Path path);
 
-  void handleFinishedResultReceived(const Result& result, int64_t sentFromId);
+  void handleFinishedResultReceived(const Result& result, NetworkedNode& nn);
 
   ResultFoundSignal& getResultFoundSignal() { return m_resultSignal; }
 

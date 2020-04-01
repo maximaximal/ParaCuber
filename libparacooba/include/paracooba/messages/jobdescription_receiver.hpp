@@ -10,8 +10,7 @@ class JobDescription;
 class JobDescriptionReceiver
 {
   public:
-  virtual void receiveJobDescription(int64_t sentFromID,
-                                     JobDescription&& jd,
+  virtual void receiveJobDescription(JobDescription&& jd,
                                      NetworkedNode& nn) = 0;
 };
 

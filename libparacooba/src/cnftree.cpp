@@ -2,6 +2,7 @@
 #include "../include/paracooba/cnf.hpp"
 #include "../include/paracooba/communicator.hpp"
 #include "../include/paracooba/config.hpp"
+#include "../include/paracooba/networked_node.hpp"
 #include "../include/paracooba/util.hpp"
 #include <cassert>
 #include <fstream>
@@ -59,18 +60,18 @@ CNFTree::setStateFromLocal(Path p, State state)
   propagateUpwardsFrom(p);
 }
 void
-CNFTree::setStateFromRemote(Path p, State state, int64_t remoteId)
+CNFTree::setStateFromRemote(Path p, State state, NetworkedNode& remoteNode)
 {
   std::lock_guard lock(m_nodeMapMutex);
   Node* node = getNode(p);
   assert(node);
-  assert(node->offloadedTo == remoteId);
+  assert(node->offloadedTo == &remoteNode);
   node->state = state;
 
   propagateUpwardsFrom(p);
 }
 void
-CNFTree::insertNodeFromRemote(Path p, int64_t remoteId)
+CNFTree::insertNodeFromRemote(Path p, NetworkedNode& remoteNode)
 {
   std::lock_guard lock(m_nodeMapMutex);
   auto [it, inserted] =
@@ -87,16 +88,16 @@ CNFTree::insertNodeFromRemote(Path p, int64_t remoteId)
       PARACOOBA_LOG(m_logger, GlobalWarning)
         << "Receive path " << pathToStrNoAlloc(p)
         << " that was inserted previously from remote " << node->receivedFrom
-        << " again! This time from " << remoteId
+        << " again! This time from " << remoteNode.getId()
         << ". Setting receivedFrom to new remote and ignore this "
            "network-related "
            "error.";
     }
   }
-  node->receivedFrom = remoteId;
+  node->receivedFrom = &remoteNode;
 }
 void
-CNFTree::offloadNodeToRemote(Path p, int64_t remoteId)
+CNFTree::offloadNodeToRemote(Path p, NetworkedNode& remoteNode)
 {
   std::lock_guard lock(m_nodeMapMutex);
   Node* node = getNode(p);
@@ -107,7 +108,7 @@ CNFTree::offloadNodeToRemote(Path p, int64_t remoteId)
   }
   assert(!node->isOffloaded());
 
-  node->offloadedTo = remoteId;
+  node->offloadedTo = &remoteNode;
   node->state = Working;
 }
 void
@@ -121,18 +122,18 @@ CNFTree::resetNode(Path p)
   node->state = Unvisited;
 }
 
-int64_t
-CNFTree::getOffloadTargetNodeID(Path p)
+NetworkedNode*
+CNFTree::getOffloadTargetNetworkedNode(Path p)
 {
   std::lock_guard lock(m_nodeMapMutex);
   Node* node = getNode(p);
   if(!node) {
-    return -1;
+    return nullptr;
   }
   if(node->isOffloaded()) {
     return node->offloadedTo;
   }
-  return 0;
+  return nullptr;
 }
 
 Path
@@ -235,7 +236,7 @@ void
 CNFTree::sendNodeResultToSender(Path p, const Node& node)
 {
   assert(node.requiresRemoteUpdate());
-  m_rootCNF.sendResult(node.receivedFrom, cleanupPath(p), []() {});
+  m_rootCNF.sendResult(*node.receivedFrom, cleanupPath(p), []() {});
 }
 
 void

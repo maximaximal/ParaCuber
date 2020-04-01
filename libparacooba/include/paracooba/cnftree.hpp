@@ -18,6 +18,7 @@
 namespace paracooba {
 class Config;
 class CNF;
+class NetworkedNode;
 
 /** @brief Implements the CNFTree concept from @ref CNFTree.
  */
@@ -52,12 +53,12 @@ class CNFTree
   {
     State state = Unvisited;
 
-    int64_t receivedFrom = 0;
-    int64_t offloadedTo = 0;
+    NetworkedNode* receivedFrom = nullptr;
+    NetworkedNode* offloadedTo = nullptr;
 
-    inline bool isOffloaded() const { return offloadedTo != 0; }
-    inline bool isLocal() const { return offloadedTo == 0; }
-    inline bool requiresRemoteUpdate() const { return receivedFrom != 0; }
+    inline bool isOffloaded() const { return offloadedTo != nullptr; }
+    inline bool isLocal() const { return offloadedTo == nullptr; }
+    inline bool requiresRemoteUpdate() const { return receivedFrom != nullptr; }
   };
 
   using StateChangedSignal = boost::signals2::signal<void(Path, State)>;
@@ -123,16 +124,16 @@ class CNFTree
   /** @brief Only called when locally setting states. */
   void setStateFromLocal(Path p, State state);
   /** @brief Only called when receiving results. */
-  void setStateFromRemote(Path p, State state, int64_t remoteId);
+  void setStateFromRemote(Path p, State state, NetworkedNode& remoteNode);
   /** @brief Only called when receiving paths. */
-  void insertNodeFromRemote(Path p, int64_t remoteId);
+  void insertNodeFromRemote(Path p, NetworkedNode& remoteNode);
   /** @brief Only called when rebalancing. Does not send anything. */
-  void offloadNodeToRemote(Path p, int64_t remoteId);
+  void offloadNodeToRemote(Path p, NetworkedNode& networkedNode);
   /** @brief Only called when resetting a node in case of re-adding tasks. */
   void resetNode(Path p);
   /** @brief Get the node a path was offloaded to. If the path is handled
-   * locally, returns 0. If the path does not exist, returns -1. */
-  int64_t getOffloadTargetNodeID(Path p);
+   * locally, returns nullptr. If the path does not exist, returns nullptr. */
+  NetworkedNode* getOffloadTargetNetworkedNode(Path p);
 
   Path getTopmostAvailableParent(Path p) const;
 

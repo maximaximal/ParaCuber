@@ -161,7 +161,7 @@ Communicator::run()
   PARACOOBA_LOG(m_logger, Trace) << "Communicator io_service started.";
   bool ioServiceRunningWithoutException = true;
   while(ioServiceRunningWithoutException) {
-      m_ioService.run();
+    m_ioService.run();
     try {
       ioServiceRunningWithoutException = false;
     } catch(const std::exception& e) {
@@ -349,12 +349,9 @@ Communicator::requestCNFTreePathInfo(
 
   Path p = request.getPath();
 
-  int64_t targetNode = cnfTree.getOffloadTargetNodeID(p);
+  NetworkedNode* nn = cnfTree.getOffloadTargetNetworkedNode(p);
 
-  if(targetNode == -1) {
-    // No reply possible as the path is not known!
-    return;
-  } else if(targetNode == 0) {
+  if(nn == nullptr) {
     // Handled locally, can directly insert local information, if this should be
     // sent to a remote or inserted into local info if requested locally.
 
